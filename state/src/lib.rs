@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use crate::crypto::Hash;
 // use serde::ser::Serialize;
 // use serde::de::Deserialize;
@@ -20,6 +21,22 @@ pub struct Asset {
 
 pub type Assets = HashMap<(u32, String), Asset>;
 
+// pub struct Data<DataType = Transaction> {
+//     pub data: DataType,
+//     //state: PhantomData<DataType>
+// }
+//
+// impl<DataType> Data<DataType> {
+//
+//     pub fn new(data: DataType) -> Self {
+//         Self {data}
+//     }
+//
+//     pub fn get_data(self) -> Self {
+//         self
+//     }
+// }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     pub command: Vec<Command>,
@@ -36,6 +53,12 @@ pub enum Command {
         asset_id: String,
     },
 }
+
+// impl<DATA> Data<DATA> for Command {
+//     fn get_data(self) -> DATA {
+//         todo!()
+//     }
+// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {

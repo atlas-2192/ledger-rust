@@ -8,5 +8,9 @@ pub enum LedgerError {
     NetworkError,
     #[error("Error while processing block")]
     BlockError,
+    #[error("Synchronization error")]
+    SyncError,
+    #[error("Persistence error")]
+    PersistenceError,
 }
 

@@ -14,8 +14,7 @@ const CMD_LEN: [u8; 1] = 1u8.to_be_bytes();
 const DATA_LEN: [u8; 4] = [0, 0, 0, 0];
 
 pub enum Command {
-    SendBlock,
-    ReceiveBlock,
+    TransmitBlock,
     GetPeers,
 }
 
@@ -25,14 +24,10 @@ impl TryFrom<u8> for Command {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             1u8 => {
-                println!("COMMAND = SendBlock");
-                Ok(Command::SendBlock)
+                println!("COMMAND = TransmitBlock");
+                Ok(Command::TransmitBlock)
             },
             2u8 => {
-                println!("COMMAND = ReceiveBlock");
-                Ok(Command::ReceiveBlock)
-            },
-            3u8 => {
                 println!("COMMAND = GetPeers");
                 Ok(Command::GetPeers)
             },
@@ -85,7 +80,7 @@ pub async fn send_command_async(
      -> Result< (), io::Error>
 {
     match command {
-        Command::SendBlock => {
+        Command::TransmitBlock => {
             let cmd_buf: [u8; 1] = [1u8];
             write_all_async(socket, &cmd_buf).await?;
             let buf_len = (buf.unwrap().len() as u32).to_be_bytes();
@@ -100,11 +95,6 @@ pub async fn send_command_async(
                 println!("failure!!!")
             }
         },
-        Command::ReceiveBlock => {
-            // let cmd_buf: [u8; 1] = [2u8];
-            // write_all_async(socket, &CMD_LEN).await?;
-            // write_all_async(socket, &cmd_buf).await?;
-        },
         Command::GetPeers => {
             let cmd_buf: [u8; 1] = [3u8];
             write_all_async(socket, &CMD_LEN).await?;
@@ -114,7 +104,7 @@ pub async fn send_command_async(
     Ok(())
 }
 
-pub async fn receive_command_async(socket: &TcpStream) -> Result<Block, io::Error>
+pub async fn receive_command_async(socket: &TcpStream) -> Result<(Command, Vec<u8>), io::Error>
 {
     let mut cmd_buf: [u8; 1] = [0u8];
     read_exact_async(socket, &mut cmd_buf).await?;
@@ -124,20 +114,17 @@ pub async fn receive_command_async(socket: &TcpStream) -> Result<Block, io::Erro
     }
     let command = command.unwrap();
     match command {
-        Command::SendBlock => {
+        Command::TransmitBlock => {
             let mut buf = DATA_LEN.clone();
             read_exact_async(socket, &mut buf).await?;
             let len = u32::from_be_bytes(buf);
             let mut block_buf = vec![0; len as _];
             read_exact_async(socket, &mut block_buf).await?;
-            let block = deserialize_block(block_buf);
+            //let block = deserialize_block(block_buf);
             println!("block has been received...");
             let mut buf: [u8; 1] = [1u8];
             write_all_async(socket, &mut buf).await?;
-            Ok(block)
-        }
-        Command::ReceiveBlock => {
-            todo!()
+            Ok((Command::TransmitBlock, block_buf.to_vec()))
         }
         Command::GetPeers => {
             todo!()
@@ -146,10 +133,10 @@ pub async fn receive_command_async(socket: &TcpStream) -> Result<Block, io::Erro
 
 }
 
-pub fn serialize_block(block: Block) -> Vec<u8> {
+pub fn serialize_block(block: &Block) -> Vec<u8> {
     DefaultOptions::new()
         .with_varint_encoding()
-        .serialize(&block).unwrap()
+        .serialize(block).unwrap()
 }
 
 pub fn deserialize_block(bytes: Vec<u8>) -> Block {
@@ -184,7 +171,7 @@ mod tests {
         // });
         //thread::sleep(Duration::from_secs(2));
         let sender = TcpStream::connect("127.0.0.1:1234").await.unwrap();
-        send_command_async(&sender, Some(serialize_block(block).as_slice()), cmd::SendBlock).await;
+        send_command_async(&sender, Some(serialize_block(&block).as_slice()), cmd::TransmitBlock).await;
     }
 
     async fn receiver(listener: TcpListener) -> TcpStream {
@@ -205,43 +192,6 @@ mod tests {
         }
     }
 }
-
-// pub async fn write_async(stream: &mut TcpStream, buf: &[u8]) -> io::Result<()> {
-//     let len = buf.len() as u32;
-//     if len == 0 {
-//         let len_bytes = 7u32.to_be_bytes();
-//         write_all_async(stream, &len_bytes).await?;
-//         write_all_async(stream, NO_DATA.as_bytes()).await?;
-//         return Ok(())
-//     }
-//     let len_bytes = len.to_be_bytes();
-//     write_all_async(stream, &len_bytes).await?;
-//     write_all_async(stream, buf).await?;
-//     Ok(())
-// }
-
-// pub async fn read_async(stream: &mut TcpStream) -> Result<Box<Vec<u8>>, io::Error> {
-//     let mut buf: [u8; 4] = [0; 4];
-//     read_exact_async(stream, &mut buf).await?;
-//     let len = u32::from_be_bytes(buf);
-//     let mut buf = vec![0; len as _];
-//     read_exact_async(stream, &mut buf).await?;
-//     if len == 7 {
-//         let no_data = bincode::deserialize::<&str>(buf.as_slice());
-//         if let Ok(no_data) = no_data {
-//             return if no_data.eq(NO_DATA) {
-//                 Err(io::Error::from(ErrorKind::InvalidData))
-//             } else {
-//                 Err(io::Error::from(ErrorKind::Other))
-//             }
-//         }
-//         else {
-//             let err = no_data.err().unwrap();
-//             println!("errrr : {}, {}", err, err.source().unwrap())
-//         }
-//     }
-//     Ok(Box::new(buf))
-// }
 
 // pub fn write_sync(stream: &mut stdTcpStream,  buf: &[u8]) -> io::Result<()> {
 //     let len = buf.len() as u32;
