@@ -193,11 +193,3 @@ mod tests {
     }
 }
 
-// pub fn write_sync(stream: &mut stdTcpStream,  buf: &[u8]) -> io::Result<()> {
-//     let len = buf.len() as u32;
-//     let len_bytes = len.to_be_bytes();
-//     stream.write_all(&len_bytes)?;
-//     stream.write_all(buf)?;
-//     Ok(())
-// }
-

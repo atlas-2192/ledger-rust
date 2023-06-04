@@ -3,14 +3,16 @@ mod sender;
 mod receiver;
 mod crypto;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::ops::Index;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use crate::receiver::Receiver;
 use crate::sender::Sender;
+use crate::storage::Storage;
 
 #[tokio::main]
 async fn main() {
@@ -18,7 +20,7 @@ async fn main() {
     let address = String::from("127.0.0.1:") + args.last().unwrap().as_str();
     let address = SocketAddr::from_str(address.as_str()).unwrap();
     let initial_peers = InitialPeers::new();
-    let storage = Arc::new(Mutex::new(Default::default()));
+    let storage = Arc::new(Mutex::new(Storage::new()));
     let storage1 = storage.clone();
     let mut receiver = Receiver::new(address, storage1).await;
     receiver.run().await;
