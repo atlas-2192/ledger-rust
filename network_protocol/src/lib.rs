@@ -14,6 +14,7 @@ const CMD_LEN: [u8; 1] = 1u8.to_be_bytes();
 const DATA_LEN: [u8; 4] = [0, 0, 0, 0];
 
 pub enum Command {
+    SendTransaction,
     TransmitBlock,
     GetPeers,
 }
@@ -90,15 +91,30 @@ pub async fn send_command_async(
             let mut buf: [u8; 1] = [0u8];
             read_exact_async(socket, &mut buf).await?;
             if buf[0] == 1 {
-                println!("success!!!")
+                println!("success")
             } else {
-                println!("failure!!!")
+                println!("failure")
             }
         },
         Command::GetPeers => {
-            let cmd_buf: [u8; 1] = [3u8];
+            let cmd_buf: [u8; 1] = [2u8];
             write_all_async(socket, &CMD_LEN).await?;
             write_all_async(socket, &cmd_buf).await?;
+        },
+        Command::SendTransaction => {
+            let cmd_buf: [u8; 1] = [3u8];
+            write_all_async(socket, &cmd_buf).await?;
+            let buf_len = (buf.unwrap().len() as u32).to_be_bytes();
+            let buf = buf.unwrap();
+            write_all_async(socket, &buf_len).await?;
+            write_all_async(socket, buf).await?;
+            let mut buf: [u8; 1] = [0u8];
+            read_exact_async(socket, &mut buf).await?;
+            if buf[0] == 1 {
+                println!("success")
+            } else {
+                println!("failure")
+            }
         }
     }
     Ok(())
@@ -127,6 +143,9 @@ pub async fn receive_command_async(socket: &TcpStream) -> Result<(Command, Vec<u
             Ok((Command::TransmitBlock, block_buf.to_vec()))
         }
         Command::GetPeers => {
+            todo!()
+        },
+        Command::SendTransaction => {
             todo!()
         }
     }

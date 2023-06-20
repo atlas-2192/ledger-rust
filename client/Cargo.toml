@@ -6,5 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tokio = { version = "1.28.0", features = ["net", "macros", "rt-multi-thread", "io-util", "test-util"] }
+tokio-io = { version = "0.1.13" }
+futures = "0.3.28"
+
 state = { path = "../state" }
 network = { path = "../network_protocol" }

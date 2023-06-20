@@ -6,7 +6,6 @@ mod crypto;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::ops::Index;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
