@@ -17,24 +17,24 @@ impl Client {
         todo!()
     }
 
-    pub fn send_transaction_to_network(&self, buf: Option<&[u8]>) {
+    pub async fn send_transaction_to_network(&self, buf: Option<&[u8]>) {
         let mut addresses = Vec::new();
         self.peers.values().for_each(|addr| addresses.push(addr.clone()));
+        let buf = buf.unwrap();
         for (_, addr) in addresses.iter().enumerate() {
             let addr = addr.clone();
-            futures::executor::block_on(
-                async {
-                    let stream = TcpStream::connect(addr.clone()).await;
-                    if let Ok(stream) = stream {
-                        let res = send_command_async(&stream, buf, Command::SendTransaction).await;
-                        if res.is_err() {
-                            println!("error while asending command to peers : {}", res.err().unwrap());
-                        }
-                    } else {
-                        println!("could not connect to peer");
+            let buf_clone = buf.clone();
+            tokio::spawn(async move {
+                let stream = TcpStream::connect(addr.clone()).await;
+                if let Ok(stream) = stream {
+                    let res = send_command_async(&stream, Some(buf_clone), Command::SendTransaction).await;
+                    if res.is_err() {
+                        println!("error while sending command to peers : {}", res.err().unwrap());
                     }
+                } else {
+                    println!("could not connect to peer");
                 }
-            );
+            });
         }
     }
 }
@@ -59,7 +59,7 @@ mod tests {
     async fn send_transaction_would_return_success() {
         let transaction = create_account_transaction();
         let client = Client::new();
-        client.send_transaction_to_network(Some(serialize_block(&transaction).as_slice()));
+        client.send_transaction_to_network(Some(serialize_block(&transaction).as_slice())).await;
     }
 
     fn create_account_transaction() -> Block {
