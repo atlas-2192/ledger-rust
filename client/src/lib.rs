@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::net::{TcpStream};
 use network::{Command, send_command_async};
+use state::Transaction;
 
 struct Client {
     peers: HashMap<u32, SocketAddr>,
@@ -17,17 +18,20 @@ impl Client {
         todo!()
     }
 
-    pub async fn send_transaction_to_network(&self, buf: Option<&[u8]>) {
+    pub async fn send_transaction_to_network(&self, transaction: Vec<u8>) {
         let mut addresses = Vec::new();
         self.peers.values().for_each(|addr| addresses.push(addr.clone()));
-        let buf = buf.unwrap();
         for (_, addr) in addresses.iter().enumerate() {
             let addr = addr.clone();
-            let buf_clone = buf.clone();
+            let transaction_clone = transaction.clone();
             tokio::spawn(async move {
                 let stream = TcpStream::connect(addr.clone()).await;
                 if let Ok(stream) = stream {
-                    let res = send_command_async(&stream, Some(buf_clone), Command::SendTransaction).await;
+                    let res = send_command_async(
+                        &stream,
+                        transaction_clone.as_slice(),
+                        Command::SendTransaction)
+                        .await;
                     if res.is_err() {
                         println!("error while sending command to peers : {}", res.err().unwrap());
                     }
@@ -51,7 +55,7 @@ fn get_initial_peers() -> HashMap<u32, SocketAddr> {
 mod tests {
 
     use tokio::net::{TcpListener, TcpStream};
-    use network::{Command, serialize_block};
+    use network::{Command, serialize_block, serialize_transaction};
     use state::{Block, Transaction};
     use crate::Client;
 
@@ -59,18 +63,14 @@ mod tests {
     async fn send_transaction_would_return_success() {
         let transaction = create_account_transaction();
         let client = Client::new();
-        client.send_transaction_to_network(Some(serialize_block(&transaction).as_slice())).await;
+        client.send_transaction_to_network(serialize_transaction(&transaction)).await;
     }
 
-    fn create_account_transaction() -> Block {
-        Block {
-            data: vec![Transaction {
-                command: vec![state::Command::CreateAccount {
-                    public_key: "12345".to_string(),
-                }],
+    fn create_account_transaction() -> Transaction {
+        Transaction {
+            command: vec![state::Command::CreateAccount {
+                public_key: "12345".to_string(),
             }],
-            signature: vec![1, 2, 3, 4, 5],
-            previous_block_hash: None,
         }
     }
 }

@@ -7,7 +7,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::convert::{TryFrom};
 use errors::LedgerError;
 use errors::LedgerError::CommandError;
-use state::Block;
+use state::{Block, Transaction};
 
 pub const NO_DATA: &str = "no data";
 const CMD_LEN: [u8; 1] = 1u8.to_be_bytes();
@@ -73,19 +73,19 @@ async fn write_all_async(stream: &TcpStream, buf: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-pub async fn send_command_async(
+pub async fn send_command_async<DATA: AsRef<[u8]>>(
     socket: &TcpStream,
-    buf: Option<&[u8]>,
+    data: DATA,
     command: Command
 )
      -> Result< (), io::Error>
 {
+    let buf = data.as_ref();
     match command {
         Command::TransmitBlock => {
             let cmd_buf: [u8; 1] = [1u8];
             write_all_async(socket, &cmd_buf).await?;
-            let buf_len = (buf.unwrap().len() as u32).to_be_bytes();
-            let buf = buf.unwrap();
+            let buf_len = (buf.len() as u32).to_be_bytes();
             write_all_async(socket, &buf_len).await?;
             write_all_async(socket, buf).await?;
             let mut buf: [u8; 1] = [0u8];
@@ -104,8 +104,7 @@ pub async fn send_command_async(
         Command::SendTransaction => {
             let cmd_buf: [u8; 1] = [3u8];
             write_all_async(socket, &cmd_buf).await?;
-            let buf_len = (buf.unwrap().len() as u32).to_be_bytes();
-            let buf = buf.unwrap();
+            let buf_len = (buf.len() as u32).to_be_bytes();
             write_all_async(socket, &buf_len).await?;
             write_all_async(socket, buf).await?;
             let mut buf: [u8; 1] = [0u8];
@@ -158,6 +157,12 @@ pub fn serialize_block(block: &Block) -> Vec<u8> {
         .serialize(block).unwrap()
 }
 
+pub fn serialize_transaction(transaction: &Transaction) -> Vec<u8> {
+    DefaultOptions::new()
+        .with_varint_encoding()
+        .serialize(transaction).unwrap()
+}
+
 pub fn deserialize_block(bytes: Vec<u8>) -> Block {
     DefaultOptions::new()
         .with_varint_encoding()
@@ -190,7 +195,7 @@ mod tests {
         // });
         //thread::sleep(Duration::from_secs(2));
         let sender = TcpStream::connect("127.0.0.1:1234").await.unwrap();
-        send_command_async(&sender, Some(serialize_block(&block).as_slice()), cmd::TransmitBlock).await;
+        send_command_async(&sender, serialize_block(&block).as_slice(), cmd::TransmitBlock).await;
     }
 
     async fn receiver(listener: TcpListener) -> TcpStream {
