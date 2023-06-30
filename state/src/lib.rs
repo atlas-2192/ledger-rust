@@ -63,12 +63,12 @@ pub struct Block {
     pub signature: Vec<u8>,
     pub hash: Hash,
     pub previous_block_hash: Option<Hash>,
-    pub data: Vec<Transaction>
+    pub transactions: Vec<Transaction>
 }
 
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.data.iter()
+        write!(f, "{}", self.transactions.iter()
             .map(|c| c.to_string())
             .reduce(|acc, c| acc + " " + c.as_str())
             .unwrap())

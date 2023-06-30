@@ -24,7 +24,7 @@ impl Storage {
     }
 
     pub fn add_block(&mut self, mut block: Block) {
-        for commands in block.data.iter().map(|transaction| &transaction.commands) {
+        for commands in block.transactions.iter().map(|transaction| &transaction.commands) {
             for command in commands {
                 command.execute(&mut self.accounts, &mut self.assets);
             }

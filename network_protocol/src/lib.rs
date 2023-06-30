@@ -206,7 +206,7 @@ mod tests {
 
     fn generate_block() -> Block {
         Block {
-            data: vec![Transaction {
+            transactions: vec![Transaction {
                 commands: vec![Command::CreateAccount {
                     public_key: "12345".to_string(),
                 }],
