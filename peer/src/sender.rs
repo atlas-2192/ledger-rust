@@ -49,7 +49,7 @@ impl Sender {
         for block in blocks.iter() {
             network::send_command_async(
                 &socket,
-                Some(serialize_block(block).as_slice()),
+                serialize_block(block).as_slice(),
                 Command::TransmitBlock)
                 .await
                 .unwrap();

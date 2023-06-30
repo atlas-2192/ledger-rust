@@ -1,8 +1,9 @@
 use std::collections::HashMap;
-use crate::crypto::Hash;
+use std::fmt::{Display, Formatter};
+use crypto::Hash;
 use serde::{Deserialize, Serialize};
+use derive_more::Display;
 
-mod crypto;
 
 #[derive(Debug, Clone)]
 pub struct Account {
@@ -20,19 +21,32 @@ pub type Assets = HashMap<(u32, String), Asset>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
-    pub command: Vec<Command>,
+    pub commands: Vec<Command>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Display for Transaction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.commands.iter()
+            .map(|c| c.to_string())
+            .reduce(|acc, c| acc + " " + c.as_str())
+            .unwrap())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Display)]
 pub enum Command {
     CreateAccount {
         public_key: String,
     },
+    #[display(fmt = "account_id: {}, value: {}, asset_id: {}",
+                     account_id,     value,     asset_id)]
     AddFunds {
         account_id: u32,
         value: i32,
         asset_id: String,
     },
+    #[display(fmt = "account_from_id: {}, account_to_id: {} value: {}, asset_id: {}",
+                     account_from_id,     account_to_id,    value,     asset_id)]
     TransferFunds {
         account_from_id: u32,
         account_to_id: u32,
@@ -41,11 +55,24 @@ pub enum Command {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Block {
-    pub data: Vec<Transaction>,
+    pub id: u64,
+    pub timestamp: i64,
+    pub nonce: u32,
     pub signature: Vec<u8>,
+    pub hash: Hash,
     pub previous_block_hash: Option<Hash>,
+    pub data: Vec<Transaction>
+}
+
+impl Display for Block {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.data.iter()
+            .map(|c| c.to_string())
+            .reduce(|acc, c| acc + " " + c.as_str())
+            .unwrap())
+    }
 }
 
 impl Command {

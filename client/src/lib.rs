@@ -68,7 +68,7 @@ mod tests {
 
     fn create_account_transaction() -> Transaction {
         Transaction {
-            command: vec![state::Command::CreateAccount {
+            commands: vec![state::Command::CreateAccount {
                 public_key: "12345".to_string(),
             }],
         }

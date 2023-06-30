@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{
 use tokio::sync::Mutex;
 use errors::LedgerError;
 use state::{Block, Transaction};
-use network::Command;
+use network::{Command, deserialize_block};
 use crate::storage::Storage;
 
 
@@ -71,6 +71,9 @@ impl Receiver {
             (Command::GetPeers, bytes) => {
                 todo!()
             }
+            (Command::SendTransaction, bytes) => {
+                todo!()
+            }
         }
     }
 
@@ -81,7 +84,7 @@ impl Receiver {
                 println!("all channels are closed");
                 return;
             };
-            let block = network::deserialize_block(block_bytes.unwrap());
+            let block = deserialize_block(block_bytes.unwrap());
             storage.lock().await.add_block(block);
         }
     }

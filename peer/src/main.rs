@@ -1,7 +1,7 @@
 mod storage;
 mod sender;
 mod receiver;
-mod crypto;
+mod miner;
 
 use std::collections::{HashMap, HashSet};
 use std::env;

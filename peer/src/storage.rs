@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use state::{Accounts, Assets, Block};
+use network::serialize_block;
 
-use crate::crypto;
+use crypto;
 
 #[derive(Debug, Clone)]
 pub struct Storage {
@@ -24,13 +24,13 @@ impl Storage {
     }
 
     pub fn add_block(&mut self, mut block: Block) {
-        for commands in block.data.iter().map(|transaction| &transaction.command) {
+        for commands in block.data.iter().map(|transaction| &transaction.commands) {
             for command in commands {
                 command.execute(&mut self.accounts, &mut self.assets);
             }
         }
         if let Some(last_block) = self.blockchain.last() {
-            block.previous_block_hash = Some(crypto::hash(last_block));
+            block.previous_block_hash = Some(crypto::hash(last_block.to_string().as_bytes()));
         }
         //self.blockchain.push(block);  // TODO consensus
         self.uncommitted_blocks.push(block);
@@ -39,4 +39,8 @@ impl Storage {
     pub fn get_uncommitted_blocks(&self) -> Vec<Block> {
         self.uncommitted_blocks.clone()
     }
+}
+
+fn validate_block(block: Block) -> bool {
+    true
 }
