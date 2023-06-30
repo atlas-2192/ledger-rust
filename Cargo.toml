@@ -1,0 +1,11 @@
+[workspace]
+
+members = [
+    "client",
+    "crypto",
+    "network_protocol",
+    "peer",
+    "state",
+    "errors",
+    "utils"
+]

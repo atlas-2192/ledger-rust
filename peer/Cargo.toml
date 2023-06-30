@@ -24,3 +24,4 @@ state = { path = "../state" }
 network = { path = "../network_protocol" }
 errors = { path = "../errors"}
 crypto = { path = "../crypto"}
+utils = { path = "../utils"}

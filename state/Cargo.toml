@@ -12,3 +12,4 @@ derive_more = "0.99.17"
 serde = { version = "1.0.160", features = ["derive"] }
 
 crypto = { path = "../crypto"}
+utils = { path = "../utils"}

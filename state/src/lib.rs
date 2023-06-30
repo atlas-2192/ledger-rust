@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use crypto::Hash;
 use serde::{Deserialize, Serialize};
 use derive_more::Display;
+use utils::bytes_vec_to_string;
 
 
 #[derive(Debug, Clone)]
@@ -68,7 +69,20 @@ pub struct Block {
 
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.transactions.iter()
+        write!(f, "id: {}, \
+                   timestamp: {}, \
+                   nonce: {}, \
+                   signature: {},  \
+                   hash: {}, \
+                   previous_block_hash: {}, \
+                   transactions: {}",
+               &self.id,
+               &self.timestamp,
+               &self.nonce,
+               bytes_vec_to_string(&self.signature),
+               bytes_vec_to_string(&self.hash),
+               bytes_vec_to_string(&self.previous_block_hash.clone().unwrap()),
+               self.transactions.iter()
             .map(|c| c.to_string())
             .reduce(|acc, c| acc + " " + c.as_str())
             .unwrap())
