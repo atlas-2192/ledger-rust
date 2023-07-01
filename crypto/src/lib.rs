@@ -18,10 +18,10 @@ pub fn hasher() -> Blake2s<U32> {
     Blake2s256::new()
 }
 
-pub fn validate_hash(hash: Hash) -> bool {
-
-    true
-}
+// pub fn validate_hash(hash: Hash) -> bool {
+//
+//     true
+// }
 
 #[cfg(test)]
 mod tests {

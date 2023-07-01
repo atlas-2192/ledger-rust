@@ -11,13 +11,15 @@ use tokio::sync::Mutex;
 use errors::LedgerError;
 use state::{Block, Transaction};
 use network::{Command, deserialize_block};
+use crate::miner::Miner;
 use crate::storage::Storage;
 
 
 #[derive(Debug)]
-pub struct Receiver {
+pub(crate) struct Receiver {
     listener: TcpListener,
-    storage: Arc<Mutex<Storage>>
+    storage: Arc<Mutex<Storage>>,
+    miner: Miner,
 }
 
 impl Receiver {
@@ -25,11 +27,12 @@ impl Receiver {
     pub async fn new(address: SocketAddr, storage: Arc<Mutex<Storage>>) -> Self {
         Self {
             listener: TcpListener::bind(address).await.unwrap(),
-            storage
+            storage,
+            miner: Miner::new()
         }
     }
 
-    pub async fn run(&mut self) {  //  -> Result<Block, BlockError>
+    pub async fn run(&mut self) {
         let (block_tx, mut block_rx) :
             (ChannelSender<Vec<u8>>, ChannelReceiver<Vec<u8>>) = mpsc::channel(20);
         let storage = self.storage.clone();

@@ -12,7 +12,7 @@ use network::{Command, serialize_block};
 use crate::storage::Storage;
 
 #[derive(Debug)]
-pub struct Sender {
+pub(crate) struct Sender {
     peers: HashMap<u32, SocketAddr>,
     storage: Arc<Mutex<Storage>>,
 }

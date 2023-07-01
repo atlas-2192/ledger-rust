@@ -6,9 +6,10 @@ use ursa::signatures::ed25519::Ed25519Sha512;
 use ursa::signatures::SignatureScheme;
 use crypto::Hash;
 use state::{Block, Transaction};
-use utils::bytes_vec_to_string;
+use utils::print_bytes;
 
-pub struct Miner {
+#[derive(Debug)]
+pub(crate) struct Miner {
     pub public_key: PublicKey,
     pub private_key: PrivateKey,
 }
@@ -58,7 +59,7 @@ impl Miner {
         };
         let finish = Utc::now();
         println!("success!!!, total time = {} sec", finish.second() - start.second());
-        println!("hash: {}, nonce: {}", bytes_vec_to_string(&hash), &nonce);
+        println!("hash: {}, nonce: {}", print_bytes(&hash), &nonce);
         block.nonce = nonce;
         block.hash = hash;
         println!("block: {}", &block);
@@ -78,7 +79,7 @@ mod tests {
     use state::{Block, Command, Transaction};
     use ursa::signatures::ed25519::Ed25519Sha512;
     use ursa::signatures::SignatureScheme;
-    use utils::bytes_vec_to_string;
+    use utils::print_bytes;
     use crate::miner::{ Miner};
 
     #[test]
@@ -89,7 +90,8 @@ mod tests {
         let previous_block = generate_block(2, previous_block_transactions);
         println!("current block transactions:");
         let current_block_transactions = generate_transactions();
-        miner.mine_block(3, &previous_block, current_block_transactions);
+        let block = miner.mine_block(2, &previous_block, current_block_transactions);
+        assert!(&block.hash.starts_with(&[0, 0]))
     }
 
     fn generate_block(nonce: u32, transactions: Vec<Transaction>) -> Block {
@@ -109,7 +111,7 @@ mod tests {
             transactions,
         };
         let hash = hash(&block.to_string().as_bytes());
-        println!("block hash : {}", bytes_vec_to_string(&hash));
+        println!("block hash : {}", print_bytes(&hash));
         block.hash = hash;
         block
     }

@@ -3,19 +3,20 @@ use std::fmt::{Display, Formatter};
 use crypto::Hash;
 use serde::{Deserialize, Serialize};
 use derive_more::Display;
-use utils::bytes_vec_to_string;
+use utils::print_bytes;
 
+pub const MAX_TRANSACTIONS_IN_BLOCK: usize = 100; // TODO constraint size of block
 
 #[derive(Debug, Clone)]
 pub struct Account {
-    pub public_key: String,
+    public_key: String,
 }
 
 pub type Accounts = HashMap<u32, Account>;
 
 #[derive(Debug, Clone)]
 pub struct Asset {
-    pub value: i32,
+    value: i32,
 }
 
 pub type Assets = HashMap<(u32, String), Asset>;
@@ -69,19 +70,20 @@ pub struct Block {
 
 impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "id: {}, \
-                   timestamp: {}, \
-                   nonce: {}, \
-                   signature: {},  \
-                   hash: {}, \
-                   previous_block_hash: {}, \
-                   transactions: {}",
+        write!(f, "block: \n
+                   id: {}, \n
+                   timestamp: {}, \n
+                   nonce: {}, \n
+                   signature: {},  \n
+                   hash: {}, \n
+                   previous_block_hash: {}, \n
+                   transactions: {} \n",
                &self.id,
                &self.timestamp,
                &self.nonce,
-               bytes_vec_to_string(&self.signature),
-               bytes_vec_to_string(&self.hash),
-               bytes_vec_to_string(&self.previous_block_hash.clone().unwrap()),
+               print_bytes(&self.signature),
+               print_bytes(&self.hash),
+               print_bytes(&self.previous_block_hash.clone().unwrap()),
                self.transactions.iter()
             .map(|c| c.to_string())
             .reduce(|acc, c| acc + " " + c.as_str())
