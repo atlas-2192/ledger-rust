@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::str::FromStr;
 use tokio::net::{TcpStream};
-use network::{Command, send_command_async};
-use state::Transaction;
+use network::{ send_data, write_all_async, read_exact_async, serialize_data, SendEvent};
 
-struct Client {
+
+pub struct Client {
     peers: HashMap<u32, SocketAddr>,
 }
 
@@ -24,13 +26,16 @@ impl Client {
         for (_, addr) in addresses.iter().enumerate() {
             let addr = addr.clone();
             let transaction_clone = transaction.clone();
-            tokio::spawn(async move {
+            if !addr.eq(&SocketAddr::from_str("127.0.0.1:1234").unwrap()) {  // TODO for test
+                continue
+            }
+            let a = tokio::spawn(async move {
                 let stream = TcpStream::connect(addr.clone()).await;
                 if let Ok(stream) = stream {
-                    let res = send_command_async(
+                    let res = send_data(
                         &stream,
                         transaction_clone.as_slice(),
-                        Command::SendTransaction)
+                        SendEvent::SendTransaction)
                         .await;
                     if res.is_err() {
                         println!("error while sending command to peers : {}", res.err().unwrap());
@@ -38,7 +43,9 @@ impl Client {
                 } else {
                     println!("could not connect to peer");
                 }
-            });
+            }) //;
+                .await;
+            println!("{}", a.is_err());
         }
     }
 }
@@ -54,8 +61,8 @@ fn get_initial_peers() -> HashMap<u32, SocketAddr> {
 #[cfg(test)]
 mod tests {
 
-    use tokio::net::{TcpListener, TcpStream};
-    use network::{Command, serialize_block, serialize_transaction};
+    use tokio::net::{TcpStream};
+    use network::{ serialize_data};
     use state::{Block, Transaction};
     use crate::Client;
 
@@ -63,11 +70,12 @@ mod tests {
     async fn send_transaction_would_return_success() {
         let transaction = create_account_transaction();
         let client = Client::new();
-        client.send_transaction_to_network(serialize_transaction(&transaction)).await;
+        client.send_transaction_to_network(serialize_data(&transaction)).await;
     }
 
     fn create_account_transaction() -> Transaction {
         Transaction {
+            fee: 333,
             commands: vec![state::Command::CreateAccount {
                 public_key: "12345".to_string(),
             }],

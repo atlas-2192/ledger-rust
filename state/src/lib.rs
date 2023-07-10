@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use crypto::Hash;
@@ -23,12 +24,43 @@ pub type Assets = HashMap<(u32, String), Asset>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
+    pub fee: u32,
     pub commands: Vec<Command>,
+}
+
+unsafe impl Send for Transaction {}
+unsafe impl Sync for Transaction {}
+
+impl Eq for Transaction {}
+
+impl PartialEq<Self> for Transaction {
+    fn eq(&self, other: &Self) -> bool {
+        todo!()
+    }
+}
+
+impl PartialOrd<Self> for Transaction {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let difference = self.fee as i64 - other.fee as i64;
+        match difference {
+            d if d > 0 => Some(Ordering::Greater),
+            d if d < 0 => Some(Ordering::Less),
+            d if d == 0 => Some(Ordering::Equal),
+            _ => unreachable!()
+        }
+    }
+}
+
+// TODO
+impl Ord for Transaction {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
 
 impl Display for Transaction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.commands.iter()
+        write!(f, "transaction: fee : {}, commands: {}", self.fee, self.commands.iter()
             .map(|c| c.to_string())
             .reduce(|acc, c| acc + " " + c.as_str())
             .unwrap())

@@ -1,18 +1,18 @@
 use ursa::keys::PublicKey;
 use state::{Accounts, Assets, Block, MAX_TRANSACTIONS_IN_BLOCK};
-use network::serialize_block;
+use network::{Data, serialize_data};
 
 use crypto;
 use errors::LedgerError;
 use utils::{print_bytes, convert_timestamp_to_day_time};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct Storage {
     blockchain: Vec<Block>,  // TODO persistence
-    uncommitted_blocks: Vec<Block>,
     accounts: Accounts,
     /// Key is a tuple of format (account_id, asset_id)
     assets: Assets,
+    pub(crate) connector_rx: Option<tokio::sync::mpsc::Receiver<Data>>
 }
 
 impl Storage {
@@ -20,9 +20,9 @@ impl Storage {
     pub fn new() -> Self {
         Self {
             blockchain: Default::default(),
-            uncommitted_blocks: Default::default(),
             accounts: Default::default(),
             assets: Default::default(),
+            connector_rx: None,
         }
     }
 
@@ -34,12 +34,11 @@ impl Storage {
             }
         };
         //self.blockchain.push(block);  // TODO consensus
-        //self.uncommitted_blocks.push(block);
         Ok(())
     }
 
-    pub fn get_uncommitted_blocks(&self) -> Vec<Block> {
-        self.uncommitted_blocks.clone()
+    pub fn get_blockchain_reference<'a>(&'a self) -> &'a Vec<Block> {
+        &self.blockchain
     }
 
     fn validate_block(&self, block: &Block, previous_block: &Block) -> bool {
@@ -74,7 +73,7 @@ impl Storage {
     }
 
     fn validate_hash(block: &Block) -> bool {
-        let hash = crypto::hash(serialize_block(block).as_slice());
+        let hash = crypto::hash(serialize_data(block).as_slice());
         hash == block.hash
     }
 

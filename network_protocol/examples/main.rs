@@ -4,7 +4,7 @@ use tokio::net::{TcpListener, TcpStream};
 async fn main() {
     let listener = TcpListener::bind("127.0.0.1:1234").await.unwrap();
     let receiver = receiver(listener).await;
-    let res = network::receive_command_async(&receiver).await;
+    let res = network::receive_event_async(&receiver).await;
     if res.is_ok() {
         println!("ok")
     }

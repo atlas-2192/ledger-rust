@@ -14,6 +14,8 @@ blake2 = "0.10.6"
 ursa = "0.3.7"
 
 chrono = "0.4.26"
+queues = "1.0.2"
+async-trait = "0.1.7"
 
 bytes = "1.4.0"
 bincode = "1.3.3"
@@ -25,3 +27,4 @@ network = { path = "../network_protocol" }
 errors = { path = "../errors"}
 crypto = { path = "../crypto"}
 utils = { path = "../utils"}
+client = { path = "../client"}
