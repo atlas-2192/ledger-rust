@@ -1,3 +1,4 @@
+#![feature(async_closure)]
 mod storage;
 mod sender;
 mod receiver;

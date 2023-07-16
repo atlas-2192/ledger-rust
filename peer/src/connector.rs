@@ -24,10 +24,10 @@ use crate::storage::Storage;
 #[derive(Debug)]
 pub struct Connector {
     pub(crate) receiver_rx: Arc<Mutex<Option<Rx<Data>>>>,
-    sender_tx: Arc<Mutex<Option<Tx<Data>>>>,
+    pub(crate) sender_tx: Arc<Mutex<Option<Tx<Data>>>>,
     pub(crate) miner_rx: Arc<Mutex<Option<Rx<Data>>>>,
     pub(crate) miner_tx: Arc<Mutex<Option<Tx<Data>>>>,
-    storage_tx: Arc<Mutex<Option<Tx<Data>>>>,
+    pub(crate) storage_tx: Arc<Mutex<Option<Tx<Data>>>>,
 }
 
 impl Connector {
@@ -157,12 +157,18 @@ mod tests {
     use utils::LOCAL_HOST;
     use client::Client;
     use crate::connector::{Connect, Connector};
+    use crate::peer::Peer;
+
+    // pub async fn set_up_peer() -> Peer {
+    //
+    // }
 
     #[tokio::test]
     async fn test_channel() {
         let address = SocketAddr::from_str((String::from(LOCAL_HOST) + "1234").as_str()).unwrap();
         let mut receiver = crate::receiver::Receiver::new(address).await;
         let mut miner = crate::miner::Miner::new();
+        //miner.run().await;
         let connector = Arc::new(Mutex::new(Connector::new()));
         let connector1 = connector.clone();
         let connector2 = connector.clone();
@@ -171,8 +177,9 @@ mod tests {
         miner.connect(connector2.clone()).await; //tokio::spawn(async move {
         connector1.lock().await.start().await;
         send_transaction_to_receiver().await;
-
     }
+
+
 
     async fn send_transaction_to_receiver() {
         let transaction = create_account_transaction();

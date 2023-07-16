@@ -34,9 +34,10 @@ use crate::storage::Storage;
 pub(crate) struct Miner {
     public_key: PublicKey,
     private_key: PrivateKey,
-    transaction_pool: TransactionPool, //Arc<Mutex<BinaryHeap<Transaction>>>,
+    transaction_pool: TransactionPool,
+    storage: Arc<Mutex<Storage>>,
     pub(crate) connector_rx: Option<Rx<Data>>,
-    pub(crate) connector_tx: Option<Tx<Data>>,
+    pub(crate) connector_tx: Arc<Mutex<Option<Tx<Data>>>>,
 }
 
 #[derive(Debug)]
@@ -58,10 +59,11 @@ impl TransactionPool {
     }
 }
 
+
 impl Future for TransactionPool {
     type Output = Vec<Transaction>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let transactions = self.transactions.clone();
         let transactions = transactions.lock().unwrap();
         match transactions.len() {
@@ -71,19 +73,19 @@ impl Future for TransactionPool {
                     let transaction = transactions.pop().unwrap();
                     transactions.push(transaction);
                 }
-                return Poll::Ready(transactions);
+                return Poll::Ready(transactions)
             }
             len if len < 10 => {
                 let transactions2 = self.transactions.clone();
+                let waker = cx.waker().clone();
                 thread::spawn(move || {
-                    let mut transactions2 = transactions2.lock().unwrap();
-                    while transactions2.len() < 10 {
+                    let transactions2 = transactions2.lock().unwrap();
+                    if transactions2.len() < 10 {
                         thread::sleep(Duration::from_secs(1));
                     }
-                    println!("transactions length >= 10")
+                    println!("transactions length >= 10");
+                    waker.wake();
                 });
-                let waker = cx.waker().clone();
-                waker.wake();
                 return Poll::Pending
             }
             _ => { unreachable!() }
@@ -99,24 +101,25 @@ impl Miner {
             public_key,
             private_key,
             transaction_pool: TransactionPool::new(),
+            storage: Arc::new(Mutex::new(Storage::new())),
             connector_rx: None,
-            connector_tx: None,
+            connector_tx: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub async fn run(&mut self, storage: Arc<StdMutex<Storage>>) {  //  -> StdReceiver<Block>
-        let connector_rx = self.connector_rx.as_mut().unwrap();
+    pub async fn run(&mut self) {  //  -> StdReceiver<Block>
+        //let connector_rx = self.connector_rx.as_mut().unwrap();
         loop {
-            let storage = storage.clone();
-            let storage = storage.lock().unwrap();
-            let previous_block = storage.get_blockchain_reference().last().unwrap();
+            let connector_tx = self.connector_tx.clone();
+            let storage = self.storage.clone();
+            let storage = storage.lock().await;
+            let previous_block = storage.get_blockchain_by_ref().last().unwrap();
             let previous_block = previous_block.clone();
             let private_key = self.private_key.clone();
             let transactions = self.transaction_pool.transactions.clone();
             let ready_to_mine = tokio::spawn(async move {
-                TransactionPool { transactions }
-            }
-                .await)
+                TransactionPool { transactions }.await
+            })
                 .await
                 .unwrap();
             let block = thread::spawn(move || {
@@ -128,12 +131,22 @@ impl Miner {
             })
                 .join()
                 .unwrap();
-            self.connector_tx.unwrap().send(block);
+            let connector_tx = connector_tx.lock().await;
+            let data = Data::Block(block);
+            connector_tx.as_ref().unwrap().send(data).await.expect("Could not send block to connector");
         }
     }
 
     pub async fn add_transaction_to_pool(&mut self, transaction: Transaction) {
-        self.transaction_pool.add_transaction_to_pool(transaction);
+        self.transaction_pool.add_transaction_to_pool(transaction).await;
+    }
+
+    /// for test!
+    pub async fn add_block_to_storage(&mut self, block: Block) {
+        let mut storage = self.storage.lock().await;
+        if let Err(_) = storage.try_add_block(block) {
+           println!("could not add block to storage")
+        };
     }
 
     fn mine_block(
@@ -141,7 +154,7 @@ impl Miner {
         target_hash_zero_count: usize,
         previous_block: Block,
         transactions: Vec<Transaction>)
-        -> Block
+        -> Block //Data
     {
         let id = previous_block.id + 1;
         let timestamp = Utc::now().timestamp();
@@ -191,38 +204,76 @@ impl Connect for Miner {
         let (tx2, rx2): (Tx<Data>, Rx<Data>) = channel(10);
         self.connector_rx = Some(rx1);
         connector.miner_tx = Arc::new(Mutex::new(Some(tx1)));
-        self.connector_tx = Some(tx2);
+        self.connector_tx = Arc::new(Mutex::new(Some(tx2)));
         connector.miner_rx = Arc::new(Mutex::new(Some(rx2)));
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
+    use std::str::FromStr;
     use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
     use rand::prelude::*;
     use chrono::Utc;
+    use tokio::spawn;
     use crypto::hash;
     use state::{Block, Command, Transaction};
     use ursa::signatures::ed25519::Ed25519Sha512;
     use ursa::signatures::SignatureScheme;
-    use utils::print_bytes;
+    use utils::{LOCAL_HOST, print_bytes};
     use crate::miner::{ Miner};
     use crate::storage::Storage;
-    use tokio::sync::{ Mutex};
+    use tokio::sync::{Mutex};
+    use crate::connector::{Connect, Connector};
 
-    #[test]
-    fn test_mine_block() {
-        let storage = Arc::new(Mutex::new(Storage::new()));
-        let miner = Miner::new();
-        println!("previous block transactions:");
-        let previous_block_transactions = generate_transactions();
+    #[tokio::test]
+    async fn mine_block_succeed() {
+        let mut miner = Miner::new();
+        miner.run().await;
+        let previous_block_transactions = vec![generate_transaction()];
         let previous_block = generate_block(2, previous_block_transactions);
-        println!("current block transactions:");
-        let current_block_transactions = generate_transactions();
+        let current_block_transactions = vec![generate_transaction()];
         let private_key = miner.private_key.clone();
         let block = Miner::mine_block(
             private_key, 2, previous_block, current_block_transactions);
         assert!(&block.hash.starts_with(&[0, 0]))
+    }
+
+    #[tokio::test]
+    async fn receive_transactions_and_start_mine_block_succeed() {
+        let miner = Arc::new(Mutex::new(Miner::new()));
+        let miner1 = miner.clone();
+        let miner3 = miner.clone();
+        let previous_block_transactions = vec![generate_transaction(), generate_transaction()];
+        let previous_block = generate_block(2, previous_block_transactions);
+        tokio::spawn(async move {
+            let mut miner = miner1.lock().await;
+            miner.add_block_to_storage(previous_block).await;
+            miner.run().await;
+        });
+        tokio::spawn(async move {
+            for _ in 0..10 {
+            let mut miner3 = miner3.lock().await;
+            miner3.add_transaction_to_pool(generate_transaction()).await;
+        } } ).await;
+    }
+
+    // let address = SocketAddr::from_str((String::from(LOCAL_HOST) + "1234").as_str()).unwrap();
+    // let mut receiver = crate::receiver::Receiver::new(address).await;
+    // let connector = Arc::new(Mutex::new(Connector::new()));
+    // let connector1 = connector.clone();
+    // let connector2 = connector.clone();
+    // receiver.connect(connector).await;
+    // tokio::spawn(async move { receiver.run().await });
+    // miner.connect(connector2.clone()).await; //tokio::spawn(async move {
+    // connector1.lock().await.start().await;
+
+    #[test]
+    fn receive_transactions_mine_block_send_block() {
+        let storage = Arc::new(Mutex::new(Storage::new()));
     }
 
     fn generate_block(nonce: u32, transactions: Vec<Transaction>) -> Block {
@@ -247,7 +298,7 @@ mod tests {
         block
     }
 
-    fn generate_transactions() -> Vec<Transaction> {
+    fn generate_transaction() -> Transaction {
         let mut rng = thread_rng();
         let n1: u8 = rng.gen_range(0..2); // command variant
         let mut n2: u8 = rng.gen_range(2..4); // number of commands in transaction
@@ -279,54 +330,11 @@ mod tests {
             commands.push(command);
             n2 -= 1;
         }
-        let mut transactions = vec![];
-        let transaction = Transaction {
+
+        Transaction {
             fee: 111,
             commands,
-        };
-        transactions.push(transaction);
-        transactions
+        }
     }
 }
-
-//
-// struct IncomingDataFuture<'a> {
-//     queue: &'a Arc<Mutex<Queue<Data>>>,
-// }
-//
-// impl Future for IncomingDataFuture<'_> {
-//     type Output = Vec<Data>;
-//
-//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         let queue = self.queue.try_lock();
-//         if queue.is_ok() {
-//             let mut queue = queue.unwrap();
-//             match queue.size() {
-//                 size if size > 0 => {
-//                     let messages_size = match size {
-//                         s if s < 10 => s,
-//                         s if s > 9 => 10,
-//                         _ => unreachable!()
-//                     };
-//                     let mut messages: Vec<Data> = vec![];
-//                     for _ in 0..messages_size {
-//                         messages.push(queue.remove().unwrap());
-//                     }
-//                     return Poll::Ready(messages)
-//                 },
-//                 size if size == 0 => {
-//                     thread::sleep(Duration::from_secs(2)); // TODO notify
-//                     let waker = cx.waker().clone();
-//                     waker.wake();
-//                     return Poll::Pending
-//                 }
-//                 _ => { unreachable!() }
-//             }
-//         } else {
-//             thread::sleep(Duration::from_secs(2)); // TODO notify
-//             cx.waker().wake_by_ref();
-//             return Poll::Pending
-//         }
-//     }
-// }
 

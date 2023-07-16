@@ -27,17 +27,16 @@ impl Storage {
     }
 
     pub fn try_add_block(&mut self, mut block: Block) -> Result<(), LedgerError> {
-
         for commands in block.transactions.iter().map(|transaction| &transaction.commands) {
             for command in commands {
                 command.execute(&mut self.accounts, &mut self.assets);
             }
         };
-        //self.blockchain.push(block);  // TODO consensus
+        self.blockchain.push(block);  // TODO consensus
         Ok(())
     }
 
-    pub fn get_blockchain_reference<'a>(&'a self) -> &'a Vec<Block> {
+    pub fn get_blockchain_by_ref(&self) -> &Vec<Block> {
         &self.blockchain
     }
 

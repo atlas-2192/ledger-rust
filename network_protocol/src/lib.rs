@@ -312,10 +312,6 @@ impl Data {
             Data::Peers(_) => 4
         }
     }
-
-    pub fn from_object() -> Self {
-
-    }
 }
 
 pub fn serialize_data<'a, DATA: serde::ser::Serialize>(data: DATA) -> Vec<u8> {
