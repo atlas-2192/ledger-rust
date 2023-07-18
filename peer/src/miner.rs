@@ -59,21 +59,20 @@ impl TransactionPool {
     }
 }
 
-
 impl Future for TransactionPool {
     type Output = Vec<Transaction>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let transactions = self.transactions.clone();
-        let transactions = transactions.lock().unwrap();
+        let mut transactions = transactions.lock().unwrap();
         match transactions.len() {
             len if len > 9 => {
-                let mut transactions = Vec::with_capacity(10);
+                let mut ready_transactions = Vec::with_capacity(10);
                 for _ in 0..transactions.len() {
                     let transaction = transactions.pop().unwrap();
-                    transactions.push(transaction);
+                    ready_transactions.push(transaction);
                 }
-                return Poll::Ready(transactions)
+                return Poll::Ready(ready_transactions)
             }
             len if len < 10 => {
                 let transactions2 = self.transactions.clone();
@@ -81,10 +80,10 @@ impl Future for TransactionPool {
                 thread::spawn(move || {
                     let transactions2 = transactions2.lock().unwrap();
                     if transactions2.len() < 10 {
-                        thread::sleep(Duration::from_secs(1));
+                        thread::sleep(Duration::from_secs(3));
+                        waker.wake();
                     }
                     println!("transactions length >= 10");
-                    waker.wake();
                 });
                 return Poll::Pending
             }
@@ -117,11 +116,11 @@ impl Miner {
             let previous_block = previous_block.clone();
             let private_key = self.private_key.clone();
             let transactions = self.transaction_pool.transactions.clone();
-            let ready_to_mine = tokio::spawn(async move {
+            let ready_to_mine = async {
                 TransactionPool { transactions }.await
-            })
-                .await
-                .unwrap();
+            }
+                .await;
+
             let block = thread::spawn(move || {
                 Self::mine_block(
                     private_key,
@@ -211,14 +210,10 @@ impl Connect for Miner {
 
 #[cfg(test)]
 mod tests {
-    use std::net::SocketAddr;
-    use std::str::FromStr;
+
     use std::sync::Arc;
-    use std::thread;
-    use std::time::Duration;
     use rand::prelude::*;
     use chrono::Utc;
-    use tokio::spawn;
     use crypto::hash;
     use state::{Block, Command, Transaction};
     use ursa::signatures::ed25519::Ed25519Sha512;
@@ -250,15 +245,22 @@ mod tests {
         let previous_block_transactions = vec![generate_transaction(), generate_transaction()];
         let previous_block = generate_block(2, previous_block_transactions);
         tokio::spawn(async move {
-            let mut miner = miner1.lock().await;
-            miner.add_block_to_storage(previous_block).await;
-            miner.run().await;
+            let mut miner2 = miner1.lock().await;
+            miner2.add_block_to_storage(previous_block).await;
+            let miner4 = miner.clone();
+            tokio::spawn(async move {
+                let mut miner4 = miner4.lock().await;
+                miner4.run().await; }
+            );
         });
         tokio::spawn(async move {
             for _ in 0..10 {
-            let mut miner3 = miner3.lock().await;
-            miner3.add_transaction_to_pool(generate_transaction()).await;
-        } } ).await;
+                let mut miner3 = miner3.lock().await;
+                miner3.add_transaction_to_pool(generate_transaction()).await;
+            }
+        })
+            .await
+            .expect("Could not add transactions to transaction pool");
     }
 
     // let address = SocketAddr::from_str((String::from(LOCAL_HOST) + "1234").as_str()).unwrap();
