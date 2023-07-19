@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use queues::{IsQueue, Queue, queue};
 use tokio::sync::Mutex;
 use network::Data;
 use tokio::sync::mpsc::{
@@ -8,9 +7,7 @@ use tokio::sync::mpsc::{
     Sender as Tx
 };
 use async_trait::async_trait;
-use tokio::runtime::{Handle, Runtime};
 use crate::sender::Sender;
-use crate::storage::Storage;
 
 /// structure for connecting modules together
 #[derive(Debug)]
@@ -19,7 +16,6 @@ pub struct Connector {
     pub(crate) sender_tx: Arc<Mutex<Option<Tx<Data>>>>,
     pub(crate) miner_rx: Arc<Mutex<Option<Rx<Data>>>>,
     pub(crate) miner_tx: Arc<Mutex<Option<Tx<Data>>>>,
-    pub(crate) storage_tx: Arc<Mutex<Option<Tx<Data>>>>,
 }
 
 impl Connector {
@@ -30,7 +26,6 @@ impl Connector {
             sender_tx: Arc::new(Mutex::new(None)),
             miner_rx: Arc::new(Mutex::new(None)),
             miner_tx: Arc::new(Mutex::new(None)),
-            storage_tx: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -39,12 +34,14 @@ impl Connector {
         let sender_tx = self.sender_tx.clone();
         let miner_rx = self.miner_rx.clone();
         let miner_tx = self.miner_tx.clone();
-        let storage_tx = self.storage_tx.clone();
-        tokio::spawn(async {
+        let started = tokio::spawn(async {
             Self::process_incoming(
-                receiver_rx, sender_tx, miner_rx, miner_tx, storage_tx).await;
-        });
-
+                receiver_rx, sender_tx, miner_rx, miner_tx).await;
+        })
+            .await;
+        if started.is_err() {
+            println!("connector error: {}", started.err().unwrap())
+        }
     }
 
     async fn process_incoming(
@@ -52,20 +49,21 @@ impl Connector {
         sender_tx: Arc<Mutex<Option<Tx<Data>>>>,
         miner_rx: Arc<Mutex<Option<Rx<Data>>>>,
         miner_tx: Arc<Mutex<Option<Tx<Data>>>>,
-        storage_tx: Arc<Mutex<Option<Tx<Data>>>>,
     )
     {
+        let sender_tx = sender_tx.clone();
+        let sender_tx1 = sender_tx.clone();
         tokio::spawn(async move {
             loop {
                 let mut miner_rx = miner_rx.lock().await;
                 let miner_rx = miner_rx.as_mut();
                 if let Some(miner_rx) = miner_rx {
                     while let Some(data) = miner_rx.recv().await {
-                        println!("get data from receiver: {}", &data);
                         match data.data_type() {
                             1 => {
-                                let storage_tx = storage_tx.clone();
-                                Self::send_data(storage_tx, data).await;
+                                println!("get block from miner: {}", &data);
+                                let sender_tx = sender_tx.clone();
+                                Self::send_data(sender_tx, data).await;
                             }
                             _ => { println!("received wrong data type: {}", data) }
                         }
@@ -73,27 +71,30 @@ impl Connector {
                 }
             }
         });
-        loop {
-            let mut receiver_rx = receiver_rx.lock().await;
-            let receiver_rx = receiver_rx.as_mut();
-            if let Some(receiver_rx) = receiver_rx {
-                while let Some(data) = receiver_rx.recv().await {
-                    println!("get data from receiver: {}", &data);
-                    match data.data_type() {
-                        1 | 2 => {
-                            let miner_tx = miner_tx.clone();
-                            Self::send_data(miner_tx, data).await
+        let sender_tx1 = sender_tx1.clone();
+        tokio::spawn( async move {
+            loop {
+                let mut receiver_rx = receiver_rx.lock().await;
+                let receiver_rx = receiver_rx.as_mut();
+                if let Some(receiver_rx) = receiver_rx {
+                    while let Some(data) = receiver_rx.recv().await {
+                        println!("get data from receiver: {}", &data);
+                        match data.data_type() {
+                            1 | 2 => {
+                                let miner_tx = miner_tx.clone();
+                                Self::send_data(miner_tx, data).await
+                            }
+                            3 | 4 => {
+                                let sender_tx = sender_tx1.clone();
+                                Self::send_data(sender_tx, data).await;
+                            }
+                            _ => { unreachable!() }
                         }
-                        3 | 4 => {
-                            let sender_tx = sender_tx.clone();
-                            Self::send_data(sender_tx, data).await;
-                        }
-                        _ => { unreachable!() }
                     }
                 }
-            }
-            println!("listen_incoming() - there is no receiver") // unreachable ?
-        };
+                println!("listen_incoming() - there is no receiver") // unreachable ?
+            };
+        });
     }
 
     // TODO retry
@@ -115,25 +116,15 @@ pub trait Connect {
     async fn connect(&mut self, connector: Arc<Mutex<Connector>>);
 }
 
-#[async_trait]
-impl Connect for Sender {
-    async fn connect(&mut self, connector: Arc<Mutex<Connector>>) {
-        let mut connector = connector.lock().await;
-        let (tx, rx): (Tx<Data>, Rx<Data>) = channel(10);
-        self.connector_rx = Some(rx);
-        connector.sender_tx = Arc::new(Mutex::new(Some(tx)));
-    }
-}
-
-#[async_trait]
-impl Connect for Storage {
-    async fn connect(&mut self, connector: Arc<Mutex<Connector>>) {
-        let mut connector = connector.lock().await;
-        let (tx, rx): (Tx<Data>, Rx<Data>) = channel(10);
-        self.connector_rx = Some(rx);
-        connector.storage_tx = Arc::new(Mutex::new(Some(tx)));
-    }
-}
+// #[async_trait]
+// impl Connect for Storage {
+//     async fn connect(&mut self, connector: Arc<Mutex<Connector>>) {
+//         let mut connector = connector.lock().await;
+//         let (tx, rx): (Tx<Data>, Rx<Data>) = channel(10);
+//         self.connector_rx = Some(rx);
+//         connector.storage_tx = Arc::new(Mutex::new(Some(tx)));
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

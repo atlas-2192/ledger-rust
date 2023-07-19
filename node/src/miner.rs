@@ -132,6 +132,7 @@ impl Miner {
             }
         });
 
+        // mine block from received transactions
         loop {
             let storage = self.storage.clone();
             let mut storage = storage.lock().await;
@@ -161,9 +162,9 @@ impl Miner {
                 let mut connector_tx = connector_tx.lock().await;
                 let connector_tx = connector_tx.as_mut().unwrap();
                 let data = Data::Block(block);
-                let sended_block = connector_tx.send(data).await;
-                if sended_block.is_err() {
-                    println!("error while sending block to connector: {}", sended_block.err().unwrap())
+                let sent_block = connector_tx.send(data).await;
+                if sent_block.is_err() {
+                    println!("error while sending block to connector: {}", sent_block.err().unwrap())
                 }
             }
         }
