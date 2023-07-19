@@ -9,6 +9,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::convert::{TryFrom};
 use std::fmt::{Display, Formatter};
 use derive_more::{AsMut, AsRef, Display};
+use serde::{Deserialize, Serialize};
 use errors::LedgerError;
 use errors::LedgerError::CommandError;
 use state::{Block, Transaction};
@@ -270,7 +271,7 @@ async fn write_response(socket: &TcpStream) -> bool {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Data {
     Block(Block) = 1,
@@ -289,7 +290,7 @@ impl Display for Data {
                 write!(f, "data (transaction) : {}", t)
             }
             Data::Peer(p) => {
-                write!(f, "data (peer) : {}", p)
+                write!(f, "data (node) : {}", p)
             }
             Data::Peers(p) => {
                 write!(f, "data (peers) : {}",
@@ -342,12 +343,6 @@ mod tests {
     #[tokio::test]
     async fn transfer_block() {
         let block = generate_block();
-        // tokio::spawn(async {
-        //     let listener = TcpListener::bind("127.0.0.1:1234").await.unwrap();
-        //     let receiver = receiver(listener).await;
-        //     receive_command_async(&receiver).await;
-        // });
-        //thread::sleep(Duration::from_secs(2));
         let sender = TcpStream::connect("127.0.0.1:1234").await.unwrap();
         send_data(&sender, serialize_data::<&Block>(&block).as_slice(), SendBlock).await;
     }

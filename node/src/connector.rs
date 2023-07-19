@@ -1,9 +1,4 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
-use std::thread;
-use std::time::Duration;
 use queues::{IsQueue, Queue, queue};
 use tokio::sync::Mutex;
 use network::Data;
@@ -14,9 +9,6 @@ use tokio::sync::mpsc::{
 };
 use async_trait::async_trait;
 use tokio::runtime::{Handle, Runtime};
-use tokio::sync::mpsc::error::SendError;
-use crate::miner::Miner;
-use crate::receiver::Receiver;
 use crate::sender::Sender;
 use crate::storage::Storage;
 
@@ -148,16 +140,12 @@ mod tests {
     use std::net::SocketAddr;
     use std::str::FromStr;
     use std::sync::Arc;
-    use std::thread;
-    use std::time::Duration;
-    use tokio::sync::mpsc::*;
     use tokio::sync::Mutex;
     use network::serialize_data;
     use state::Transaction;
     use utils::LOCAL_HOST;
     use client::Client;
     use crate::connector::{Connect, Connector};
-    use crate::peer::Peer;
 
     // pub async fn set_up_peer() -> Peer {
     //

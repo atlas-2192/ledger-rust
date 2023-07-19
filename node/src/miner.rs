@@ -36,7 +36,7 @@ pub(crate) struct Miner {
     private_key: PrivateKey,
     transaction_pool: TransactionPool,
     storage: Arc<Mutex<Storage>>,
-    pub(crate) connector_rx: Option<Rx<Data>>,
+    pub(crate) connector_rx: Arc<Mutex<Option<Rx<Data>>>>,
     pub(crate) connector_tx: Arc<Mutex<Option<Tx<Data>>>>,
 }
 
@@ -53,7 +53,7 @@ impl TransactionPool {
         }
     }
 
-    async fn add_transaction_to_pool(&mut self, transaction: Transaction) {
+    fn add_transaction_to_pool(&mut self, transaction: Transaction) {
         let mut transactions = self.transactions.lock().unwrap();
         transactions.push(transaction);
     }
@@ -101,17 +101,40 @@ impl Miner {
             private_key,
             transaction_pool: TransactionPool::new(),
             storage: Arc::new(Mutex::new(Storage::new())),
-            connector_rx: None,
+            connector_rx: Arc::new(Mutex::new(None)),
             connector_tx: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub async fn run(&mut self) {  //  -> StdReceiver<Block>
-        //let connector_rx = self.connector_rx.as_mut().unwrap();
+    pub async fn run(&mut self) {
+        let connector_rx = self.connector_rx.clone();
+        let connector_tx = self.connector_tx.clone();
+        let storage = self.storage.clone();
+        // get block from other node
+        tokio::spawn(async move {
+            loop {
+                let connector_rx = connector_rx.clone();
+                let mut connector_rx = connector_rx.lock().await;
+                let connector_rx = connector_rx.as_mut().unwrap();
+                while let Some(data) = connector_rx.recv().await {
+                    match data {
+                        Data::Block(block) => {
+                            let storage = storage.clone();
+                            let mut storage = storage.lock().await;
+                            let added_block = storage.try_add_block(block);
+                            if added_block.is_err() {
+                                println!("error while adding block: {}", added_block.err().unwrap())
+                            }
+                        }
+                        _ => { println!("received wrong data type") }
+                    }
+                }
+            }
+        });
+
         loop {
-            let connector_tx = self.connector_tx.clone();
             let storage = self.storage.clone();
-            let storage = storage.lock().await;
+            let mut storage = storage.lock().await;
             let previous_block = storage.get_blockchain_by_ref().last().unwrap();
             let previous_block = previous_block.clone();
             let private_key = self.private_key.clone();
@@ -130,18 +153,27 @@ impl Miner {
             })
                 .join()
                 .unwrap();
-            let connector_tx = connector_tx.lock().await;
-            let data = Data::Block(block);
-            connector_tx.as_ref().unwrap().send(data).await.expect("Could not send block to connector");
+            let added_block = storage.try_add_block(block.clone());
+            if added_block.is_err() {
+                println!("failed to add self-mined block");
+            } else {
+                let connector_tx = connector_tx.clone();
+                let mut connector_tx = connector_tx.lock().await;
+                let connector_tx = connector_tx.as_mut().unwrap();
+                let data = Data::Block(block);
+                let sended_block = connector_tx.send(data).await;
+                if sended_block.is_err() {
+                    println!("error while sending block to connector: {}", sended_block.err().unwrap())
+                }
+            }
         }
     }
 
-    pub async fn add_transaction_to_pool(&mut self, transaction: Transaction) {
-        self.transaction_pool.add_transaction_to_pool(transaction).await;
+    pub fn add_transaction_to_pool(&mut self, transaction: Transaction) {
+        self.transaction_pool.add_transaction_to_pool(transaction);
     }
 
-    /// for test!
-    pub async fn add_block_to_storage(&mut self, block: Block) {
+    async fn add_block_to_storage(&mut self, block: Block) {
         let mut storage = self.storage.lock().await;
         if let Err(_) = storage.try_add_block(block) {
            println!("could not add block to storage")
@@ -201,7 +233,7 @@ impl Connect for Miner {
         let mut connector = connector.lock().await;
         let (tx1, rx1): (Tx<Data>, Rx<Data>) = channel(10);
         let (tx2, rx2): (Tx<Data>, Rx<Data>) = channel(10);
-        self.connector_rx = Some(rx1);
+        self.connector_rx = Arc::new(Mutex::new(Some(rx1)));
         connector.miner_tx = Arc::new(Mutex::new(Some(tx1)));
         self.connector_tx = Arc::new(Mutex::new(Some(tx2)));
         connector.miner_rx = Arc::new(Mutex::new(Some(rx2)));
@@ -256,7 +288,7 @@ mod tests {
         tokio::spawn(async move {
             for _ in 0..10 {
                 let mut miner3 = miner3.lock().await;
-                miner3.add_transaction_to_pool(generate_transaction()).await;
+                miner3.add_transaction_to_pool(generate_transaction());
             }
         })
             .await
