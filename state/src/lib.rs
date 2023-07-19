@@ -153,3 +153,8 @@ impl Command {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+}

@@ -41,7 +41,7 @@ impl Client {
                         println!("error while sending command to peers : {}", res.err().unwrap());
                     }
                 } else {
-                    println!("could not connect to peer");
+                    println!("could not connect to node");
                 }
             }) //;
                 .await;

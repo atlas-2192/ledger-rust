@@ -58,7 +58,7 @@ impl Receiver {
     {
         let data = receive_data(socket).await;
         if data.is_ok() {
-            let tx = self.connector_tx.as_ref().unwrap().clone();
+            let tx = self.connector_tx.as_ref().unwrap();
             let sent = tx.send(data.unwrap()).await;
             if sent.is_err() {
                 println!("channel has been closed {}", sent.err().unwrap());

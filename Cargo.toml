@@ -4,7 +4,7 @@ members = [
     "client",
     "crypto",
     "network_protocol",
-    "peer",
+    "node",
     "state",
     "errors",
     "utils"

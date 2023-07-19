@@ -16,14 +16,13 @@ use tokio::sync::Mutex;
 
 const LOCAL_HOST: &str = "127.0.0.1:";
 
-pub struct Peer {
-    storage: Arc<Mutex<Storage>>,
+pub struct Node {
     miner: Miner,
     sender: Sender,
     receiver: Receiver,
 }
 
-impl Peer {
+impl Node {
 
     // pub async fn new(local_port: &str) -> Self {
     //     let address = SocketAddr::from_str((String::from(LOCAL_HOST) + local_port).as_str()).unwrap();
@@ -52,10 +51,10 @@ impl Peer {
                         //self.miner.try_add_block(block);
                     }
                     Data::Transaction(transaction) => {
-                        miner.add_transaction_to_pool(transaction).await;
+                        miner.add_transaction_to_pool(transaction);
                     }
                     Data::Peer(peer) => {
-                        // sender.add_peer(peer)
+                        // sender.add_peer(node)
                     }
                     Data::Peers(peers) => {
                         // sender.send_peers(peers) ???

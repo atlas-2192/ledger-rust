@@ -26,14 +26,17 @@ impl Storage {
         }
     }
 
-    pub fn try_add_block(&mut self, mut block: Block) -> Result<(), LedgerError> {
+    pub fn try_add_block(&mut self, block: Block) -> Result<(), LedgerError> {
         for commands in block.transactions.iter().map(|transaction| &transaction.commands) {
             for command in commands {
                 command.execute(&mut self.accounts, &mut self.assets);
             }
         };
-        self.blockchain.push(block);  // TODO consensus
-        Ok(())
+        if Self::validate_chain(self, vec![]) {
+            self.blockchain.push(block);  // TODO consensus
+            return Ok(())
+        }
+        Err(LedgerError::BlockError)
     }
 
     pub fn get_blockchain_by_ref(&self) -> &Vec<Block> {
@@ -41,11 +44,11 @@ impl Storage {
     }
 
     fn validate_block(&self, block: &Block, previous_block: &Block) -> bool {
-        if block.id - previous_block.id != 1 {
+        if block.id != previous_block.id - 1 {
             println!("invalid block id: {}", &block.id);
             return false
         }
-        if previous_block.hash != block.hash {
+        if &previous_block.hash != block.previous_block_hash.as_ref().unwrap() {
             println!("invalid previous block hash: {}", print_bytes(&previous_block.hash));
             return false
         }

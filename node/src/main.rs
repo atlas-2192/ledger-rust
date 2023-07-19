@@ -3,14 +3,14 @@ mod storage;
 mod sender;
 mod receiver;
 mod miner;
-mod peer;
+mod node;
 mod connector;
 
-use crate::peer::Peer;
+use crate::node::Node;
 
 
 #[tokio::main]
 async fn main() {
-    Peer::start("7777").await;
+    Node::start("7777").await;
 }
 
