@@ -117,9 +117,9 @@ impl Display for Block {
                print_bytes(&self.hash),
                print_bytes(&self.previous_block_hash.clone().unwrap()),
                self.transactions.iter()
-            .map(|c| c.to_string())
-            .reduce(|acc, c| acc + " " + c.as_str())
-            .unwrap())
+                    .map(|c| c.to_string())
+                    .reduce(|acc, c| acc + " " + c.as_str())
+                    .unwrap())
     }
 }
 

@@ -174,6 +174,7 @@ impl Miner {
         self.transaction_pool.add_transaction_to_pool(transaction);
     }
 
+    /// FOR TEST ONLY
     async fn add_block_to_storage(&mut self, block: Block) {
         let mut storage = self.storage.lock().await;
         if let Err(_) = storage.try_add_block(block) {

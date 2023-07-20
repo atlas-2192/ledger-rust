@@ -27,20 +27,53 @@ impl Storage {
     }
 
     pub fn try_add_block(&mut self, block: Block) -> Result<(), LedgerError> {
-        for commands in block.transactions.iter().map(|transaction| &transaction.commands) {
-            for command in commands {
-                command.execute(&mut self.accounts, &mut self.assets);
+        let blockchain_len = self.blockchain.len();
+        let previous_block = self.blockchain.get(blockchain_len);
+        if let Some(previous_block) = previous_block {
+            if Self::validate_block(self, &block, previous_block) {
+                // TODO      persistence <--> state in memory???
+                for commands in block.transactions.iter().map(|transaction| &transaction.commands) {
+                    for command in commands {
+                        command.execute(&mut self.accounts, &mut self.assets);
+                    }
+                };
+                self.blockchain.push(block);
+                return Ok(())
+            } else {
+                return Err(LedgerError::BlockError)
             }
-        };
-        if Self::validate_chain(self, vec![]) {
-            self.blockchain.push(block);  // TODO consensus
+        } else {
+            Self::try_add_genesis_block(self, block)?;
             return Ok(())
         }
-        Err(LedgerError::BlockError)
     }
 
     pub fn get_blockchain_by_ref(&self) -> &Vec<Block> {
         &self.blockchain
+    }
+
+    fn try_add_genesis_block(&mut self, block: Block) -> Result<(), LedgerError>  {
+        if block.previous_block_hash.is_some() {
+            return Err(LedgerError::BlockError)
+        }
+        if block.id > 1 {
+            println!("invalid block id: {}", &block.id);
+            return Err(LedgerError::BlockError)
+        }
+        if block.previous_block_hash.is_some() {
+            println!("this is not genesis block");
+            return Err(LedgerError::BlockError)
+        }
+        if block.transactions.len() > MAX_TRANSACTIONS_IN_BLOCK {
+            println!("transactions count exceeded: {}", &block.transactions.len());
+            return Err(LedgerError::BlockError)
+        }
+        if !Self::validate_hash(&block) {
+            println!("invalid block hash: {}", print_bytes(&block.hash));
+            return Err(LedgerError::BlockError)
+        }
+        self.blockchain.push(block);
+        Ok(())
     }
 
     fn validate_block(&self, block: &Block, previous_block: &Block) -> bool {
