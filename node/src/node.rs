@@ -13,6 +13,7 @@ use std::thread;
 use queues::{Queue, queue};
 use network::Data;
 use tokio::sync::Mutex;
+use crate::connector::{Connect, Connector};
 
 const LOCAL_HOST: &str = "127.0.0.1:";
 
@@ -24,47 +25,24 @@ pub struct Node {
 
 impl Node {
 
-    // pub async fn new(local_port: &str) -> Self {
-    //     let address = SocketAddr::from_str((String::from(LOCAL_HOST) + local_port).as_str()).unwrap();
-    //     Self {
-    //         storage: Arc::new(Mutex::new(Storage::new())),
-    //         miner: Miner::new(),
-    //         sender: Sender::new(),
-    //         receiver: Receiver::new(address).await
-    //     }
-    // }
-
     pub async fn start(local_port: &str) { //&mut self
         let address = SocketAddr::from_str((String::from(LOCAL_HOST) + local_port).as_str()).unwrap();
-        let storage = Arc::new(Mutex::new(Storage::new()));
-        let mut miner = Miner::new();
-        let sender = Sender::new();
-        let (data_tx, mut data_rx) = tokio::sync::mpsc::channel::<Data>(10);
-        //Receiver::run(address, data_tx).await;
-        let storage1 = storage.clone();
-        //let block_rx = miner.run(storage1);
-        loop {
-            let data = data_rx.recv().await;
-            if let Some(data) = data {
-                match data {
-                    Data::Block(block) => {
-                        //self.miner.try_add_block(block);
-                    }
-                    Data::Transaction(transaction) => {
-                        miner.add_transaction_to_pool(transaction);
-                    }
-                    Data::Peer(peer) => {
-                        // sender.add_peer(node)
-                    }
-                    Data::Peers(peers) => {
-                        // sender.send_peers(peers) ???
-                    }
-                }
-            }
-        }
-    }
 
-    // fn storage_guard(&mut self) -> MutexGuard<Storage> {
-    //     self.storage.lock().await
-    // }
+        let mut receiver = Receiver::new(address).await;
+        let mut sender = Sender::new();
+        let mut miner = Miner::new();
+
+        let connector = Arc::new(Mutex::new(Connector::new()));
+        let c1 = connector.clone();
+        let c2 = connector.clone();
+        let c3 = connector.clone();
+
+        miner.connect(c1).await;
+        sender.connect(c2).await;
+        receiver.connect(c3).await;
+
+        tokio::spawn(async move { receiver.run().await } );
+        tokio::spawn(async move { sender.run().await } );
+        tokio::spawn(async move { miner.run().await } );
+    }
 }

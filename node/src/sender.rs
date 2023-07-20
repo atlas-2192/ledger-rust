@@ -29,7 +29,7 @@ impl Sender {
         }
     }
 
-    pub async fn start(&mut self) {
+    pub async fn run(&mut self) {
         loop {
             let peers = &self.peers;
             if let Some(connector_rx) = self.connector_rx.as_mut() {

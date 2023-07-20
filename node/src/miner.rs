@@ -136,8 +136,19 @@ impl Miner {
         loop {
             let storage = self.storage.clone();
             let mut storage = storage.lock().await;
-            let previous_block = storage.get_blockchain_by_ref().last().unwrap();
-            let previous_block = previous_block.clone();
+            let previous_block = storage.get_blockchain_by_ref().last();
+            let previous_block_id;
+            let previous_block_hash;
+            match previous_block {
+                None => {
+                    previous_block_id = None;
+                    previous_block_hash = None;
+                },
+                Some(p_b) => {
+                    previous_block_id = Some(p_b.id);
+                    previous_block_hash = Some(p_b.hash.clone());
+                }
+            };
             let private_key = self.private_key.clone();
             let transactions = self.transaction_pool.transactions.clone();
             let ready_to_mine = async {
@@ -149,7 +160,8 @@ impl Miner {
                 Self::mine_block(
                     private_key,
                     2,
-                    previous_block,
+                    previous_block_hash,
+                    previous_block_id,
                     ready_to_mine)
             })
                 .join()
@@ -185,17 +197,21 @@ impl Miner {
     fn mine_block(
         private_key: PrivateKey,
         target_hash_zero_count: usize,
-        previous_block: Block,
+        previous_block_hash: Option<Hash>,
+        previous_block_id: Option<u64>,
         transactions: Vec<Transaction>)
-        -> Block //Data
+        -> Block
     {
-        let id = previous_block.id + 1;
+        let mut id = 0;
+        if previous_block_id.is_some() {
+            id = previous_block_id.unwrap() + 1;
+        };
         let timestamp = Utc::now().timestamp();
         let signature = Ed25519Sha512::new()
             .sign(format!("{:?}", &transactions).as_bytes(), &private_key)
             .unwrap();
         let mut nonce = 0;
-        let mut hash: Hash = previous_block.hash.clone();
+        let mut hash = vec![0,0,0,0,0,0,0,0,0,0,0,0];
         let mut block = Default::default();
         let start = Utc::now();
         while !is_hash_valid(&hash, target_hash_zero_count) {  // TODO concurrent calculation
@@ -206,7 +222,7 @@ impl Miner {
                 nonce,
                 signature: signature.clone(),
                 hash: hash.clone(),
-                previous_block_hash: Some(previous_block.hash.clone()),
+                previous_block_hash: previous_block_hash.clone(),
                 transactions: transactions.clone()
             };
             hasher.update(format!("{:?}", block).as_bytes());
@@ -267,7 +283,11 @@ mod tests {
         let current_block_transactions = vec![generate_transaction()];
         let private_key = miner.private_key.clone();
         let block = Miner::mine_block(
-            private_key, 2, previous_block, current_block_transactions);
+            private_key,
+            2,
+            Some(previous_block.hash),
+            Some(previous_block.id),
+            current_block_transactions);
         assert!(&block.hash.starts_with(&[0, 0]))
     }
 
@@ -296,16 +316,6 @@ mod tests {
             .await
             .expect("Could not add transactions to transaction pool");
     }
-
-    // let address = SocketAddr::from_str((String::from(LOCAL_HOST) + "1234").as_str()).unwrap();
-    // let mut receiver = crate::receiver::Receiver::new(address).await;
-    // let connector = Arc::new(Mutex::new(Connector::new()));
-    // let connector1 = connector.clone();
-    // let connector2 = connector.clone();
-    // receiver.connect(connector).await;
-    // tokio::spawn(async move { receiver.run().await });
-    // miner.connect(connector2.clone()).await; //tokio::spawn(async move {
-    // connector1.lock().await.start().await;
 
     #[test]
     fn receive_transactions_mine_block_send_block() {

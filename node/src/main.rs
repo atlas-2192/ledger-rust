@@ -6,6 +6,7 @@ mod miner;
 mod node;
 mod connector;
 
+use client::Client;
 use crate::node::Node;
 
 
@@ -13,4 +14,104 @@ use crate::node::Node;
 async fn main() {
     Node::start("7777").await;
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::thread;
+    use std::time::Duration;
+    use rand::{Rng, thread_rng};
+    use ursa::signatures::ed25519::Ed25519Sha512;
+    use ursa::signatures::SignatureScheme;
+    use client::Client;
+    use network::serialize_data;
+    use state::{Command, Transaction};
+
+
+    #[tokio::test]
+    async fn start_blockchain_and_send_transactions() {
+        let client1 = Client::new();
+        let client2 = Client::new();
+        let client3 = Client::new();
+
+        let mut transactions1 = [0u8..10u8].iter()
+            .map(|_| generate_transaction())
+            .collect::<Vec<Transaction>>();
+        let mut transactions2 = [0u8..10u8].iter()
+            .map(|_| generate_transaction())
+            .collect::<Vec<Transaction>>();
+        let mut transactions3 = [0u8..10u8].iter()
+            .map(|_| generate_transaction())
+            .collect::<Vec<Transaction>>();
+
+        tokio::spawn(async move {
+            for i in 0..transactions1.len() {
+                client1.send_transaction_to_network(
+                    serialize_data(transactions1.remove(i)))
+                    .await;
+                thread::sleep(Duration::from_millis(200));
+            }
+        });
+        thread::sleep(Duration::from_secs(2));
+        tokio::spawn(async move {
+            for i in 0..transactions2.len() {
+                client2.send_transaction_to_network(
+                    serialize_data(transactions2.remove(i)))
+                    .await;
+                thread::sleep(Duration::from_millis(200));
+            }
+        });
+        thread::sleep(Duration::from_secs(2));
+        tokio::spawn(async move {
+            for i in 0..transactions3.len() {
+                client3.send_transaction_to_network(
+                    serialize_data(transactions3.remove(i)))
+                    .await;
+                thread::sleep(Duration::from_millis(200));
+            }
+        });
+    }
+
+    fn generate_transaction() -> Transaction {
+        let mut rng = thread_rng();
+        let n1: u8 = rng.gen_range(0..2); // command variant
+        let mut n2: u8 = rng.gen_range(2..4); // number of commands in transaction
+        let mut commands = vec![];
+
+        while n2 > 0 {
+            let command: Command;
+            match n1 {
+                0 => {
+                    let (public_key, _) = Ed25519Sha512::new().keypair(None).unwrap();
+                    command = Command::CreateAccount { public_key: public_key.to_string() }
+                }
+                1 => {
+                    command = Command::AddFunds {
+                        account_id: rng.gen_range(0..100),
+                        value: rng.gen_range(0..1000),
+                        asset_id: "TEST".to_string()
+                    }
+                }
+                2 => {
+                    command = Command::TransferFunds {
+                        account_from_id: rng.gen_range(0..100),
+                        account_to_id: rng.gen_range(0..100),
+                        value: rng.gen_range(0..1000),
+                        asset_id: "TEST2".to_string()
+                    }
+                }
+                _ => { unreachable!() }
+            };
+            println!("command: {}", &command);
+            commands.push(command);
+            n2 -= 1;
+        }
+
+        Transaction {
+            fee: 111,
+            commands,
+        }
+    }
+}
+
 
