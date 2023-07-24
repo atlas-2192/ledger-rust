@@ -1,7 +1,7 @@
 use std::collections::BinaryHeap;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, TryLockResult};
 use std::sync::Mutex as StdMutex;
 use std::sync::mpsc::{Sender as StdSender, Receiver as StdReceiver};
 use std::task::{Context, Poll};
@@ -12,7 +12,7 @@ use tokio::sync::mpsc::{
 };
 use std::thread;
 use std::time::Duration;
-use tokio::sync::{ Mutex};
+use tokio::sync::{Mutex, TryLockError};
 use blake2::{Blake2s, Blake2s256, Digest};
 use chrono::{Timelike, Utc};
 //use futures::channel::mpsc;
@@ -27,7 +27,7 @@ use network::Data;
 use state::{Block, Transaction};
 use utils::print_bytes;
 use async_trait::async_trait;
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, warn};
 use crate::connector::{Connect, Connector};
 use crate::storage::Storage;
 
@@ -43,20 +43,33 @@ pub(crate) struct Miner {
 
 #[derive(Debug)]
 struct TransactionPool {
-    transactions: Arc<StdMutex<BinaryHeap<Transaction>>>,
+    transactions: Arc<Mutex<BinaryHeap<Transaction>>>,
 }
 
 impl TransactionPool {
 
     fn new() -> Self {
         Self {
-            transactions: Arc::new(StdMutex::new(BinaryHeap::new())),
+            transactions: Arc::new(Mutex::new(BinaryHeap::new())),
         }
     }
 
     pub fn add_transaction_to_pool(&mut self, transaction: Transaction) {
-        let mut transactions = self.transactions.lock().unwrap();
+        let transactions = self.transactions.try_lock();
+        while let Err(_) = transactions {
+            warn!("transaction pool lock is already acquired")
+        }
+        let mut transactions = transactions.unwrap();
         transactions.push(transaction);
+    }
+
+    fn transactions_len(&self) -> usize {
+        let transactions = self.transactions.try_lock();
+        while let Err(_) = transactions {
+            warn!("transaction pool lock is already acquired")
+        }
+        let mut transactions = transactions.unwrap();
+        transactions.len()
     }
 }
 
@@ -64,26 +77,41 @@ impl Future for TransactionPool {
     type Output = Vec<Transaction>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let transactions = self.transactions.clone();
-        let mut transactions = transactions.lock().unwrap();
-        match transactions.len() {
+        match self.transactions_len() {
             len if len > 9 => {
-                let mut ready_transactions = Vec::with_capacity(10);
-                for _ in 0..transactions.len() {
-                    let transaction = transactions.pop().unwrap();
-                    ready_transactions.push(transaction);
+                trace!("transactions length > 9");
+                let transactions = self.transactions.clone();
+                let transactions = transactions.try_lock();
+                return if let Ok(mut transactions) = transactions {
+                    let mut ready_transactions = Vec::with_capacity(10);
+                    for _ in 0..transactions.len() {
+                        let transaction = transactions.pop().unwrap();
+                        ready_transactions.push(transaction);
+                    }
+                    Poll::Ready(ready_transactions)
+                } else {
+                    cx.waker().clone().wake();
+                    Poll::Pending
                 }
-                return Poll::Ready(ready_transactions)
             }
             len if len < 10 => {
-                let transactions2 = self.transactions.clone();
+                let transactions = self.transactions.clone();
                 let waker = cx.waker().clone();
                 thread::spawn(move || {
-                    let transactions2 = transactions2.lock().unwrap();
-                    if transactions2.len() < 10 {
-                        thread::sleep(Duration::from_secs(3));
-                        waker.wake();
-                    }
+                    let transactions = transactions.try_lock();
+                    match transactions {
+                        Ok(mutex_guard) => {
+                            warn!("transactions lock ACQUIRED");
+                            thread::sleep(Duration::from_secs(3));
+                            waker.clone().wake();
+                        }
+                        Err(ref e) => {
+                            warn!("transactions lock is already acquired: {}", e);
+                            thread::sleep(Duration::from_secs(1));
+                            waker.clone().wake();
+                        }
+                    };
+                    warn!("transactions lock RELEASED");
                 });
                 return Poll::Pending
             }
@@ -130,9 +158,13 @@ impl Miner {
                         }
                         Data::Transaction(transaction) => {
                             info!("received transaction from other node: {}", &transaction);
-                            let t_p = transaction_pool.clone();
-                            let mut t_p = t_p.lock().await;
-                            t_p.add_transaction_to_pool(transaction);
+                            let transaction_pool = transaction_pool.clone();
+                            tokio::task::block_in_place(move || {
+                                let mut transaction_pool = transaction_pool.blocking_lock();
+                                info!("transaction_pool guard acquired");
+                                transaction_pool.add_transaction_to_pool(transaction);
+                            });
+
                         }
                         _ => { error!("received wrong data type") }
                     }
