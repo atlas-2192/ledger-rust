@@ -13,6 +13,7 @@ use tokio::sync::mpsc::{
     Receiver as Rx,
     Sender as Tx
 };
+use tracing::error;
 
 #[derive(Debug)]
 pub(crate) struct Sender {
@@ -39,7 +40,7 @@ impl Sender {
                             Self::send_block_to_network(peers, block).await;
                         }
                         Data::Transaction(_) => {
-                            println!("error: transaction is not intended to be sent by peer")
+                            error!("error: transaction is not intended to be sent by peer")
                         }
                         Data::Peer(_) => { todo!() }
                         Data::Peers(_) => { todo!() }

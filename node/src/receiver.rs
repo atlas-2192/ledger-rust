@@ -8,6 +8,7 @@ use tokio::sync::mpsc::{
     Sender as Tx
 };
 use async_trait::async_trait;
+use tracing::{error, trace};
 use errors::LedgerError;
 use network::{receive_data, Data};
 use crate::connector::{Connect, Connector};
@@ -32,40 +33,29 @@ impl Receiver {
 
     pub async fn run(&mut self) {
         loop {
-            match self.listener.accept().await {
-                Ok((mut socket, addr)) => {
-                    println!("accepted socket : {addr}");
-                    let processed = Self::process_incoming(self, &mut socket).await;
-                    if processed.is_err() {
-                        println!("error processing incoming data")
-                    }
-                }
-                Err(e) => {
-                    println!("couldn't get client: {:?}", e);
-                    loop {
-                        if let Ok(new_listener) = TcpListener::bind(&self.address).await {
-                            self.listener = new_listener;
-                            break;
-                        }
-                    }
+            while let Ok((mut socket, addr)) = self.listener.accept().await {
+                trace!("accepted socket : {addr}");
+                let processed = Self::process_incoming(self, &mut socket).await;
+                if processed.is_err() {
+                    error!("error processing incoming data")
                 }
             }
         }
     }
 
     async fn process_incoming(&mut self, socket: &mut TcpStream)
-        -> Result<(), LedgerError> // tokio::sync::mpsc::Receiver<Data>
+        -> Result<(), LedgerError>
     {
         let data = receive_data(socket).await;
         if data.is_ok() {
             let tx = self.connector_tx.as_ref().unwrap();
             let sent = tx.send(data.unwrap()).await;
             if sent.is_err() {
-                println!("channel has been closed {}", sent.err().unwrap());
+                error!("connector_tx: {}", sent.err().unwrap());
                 return Err(LedgerError::SyncError)
             }
         } else {
-            println!("failed to receive data from network {}", data.err().unwrap());
+            error!("failed to receive data from network {}", data.err().unwrap());
             return Err(LedgerError::NetworkError)
         }
         Ok(())

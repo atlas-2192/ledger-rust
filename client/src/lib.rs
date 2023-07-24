@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::str::FromStr;
 use tokio::net::{TcpStream};
-use network::{ send_data, write_all_async, read_exact_async, serialize_data, SendEvent};
+use tracing::error;
+use network::{ send_data, read_exact_async, serialize_data, SendEvent};
 
 
 pub struct Client {
@@ -26,9 +25,9 @@ impl Client {
         for (_, addr) in addresses.iter().enumerate() {
             let addr = addr.clone();
             let transaction_clone = transaction.clone();
-            if !addr.eq(&SocketAddr::from_str("127.0.0.1:1234").unwrap()) {  // TODO for test
-                continue
-            }
+            // if !addr.eq(&SocketAddr::from_str("127.0.0.1:1234").unwrap()) {  // for test
+            //     continue
+            // }
             let a = tokio::spawn(async move {
                 let stream = TcpStream::connect(addr.clone()).await;
                 if let Ok(stream) = stream {
@@ -38,14 +37,14 @@ impl Client {
                         SendEvent::SendTransaction)
                         .await;
                     if res.is_err() {
-                        println!("error while sending command to peers : {}", res.err().unwrap());
+                        error!("error while sending command to peers : {}", res.err().unwrap());
                     }
                 } else {
-                    println!("could not connect to node");
+                    error!("could not connect to node");
                 }
             }) //;
                 .await;
-            println!("{}", a.is_err());
+            error!("{}", a.is_err());
         }
     }
 }

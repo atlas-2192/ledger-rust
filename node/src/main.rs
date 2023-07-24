@@ -6,13 +6,24 @@ mod miner;
 mod node;
 mod connector;
 
-use client::Client;
+use tracing_subscriber;
+use std::time::Duration;
 use crate::node::Node;
 
 
-#[tokio::main]
-async fn main() {
-    Node::start("7777").await;
+fn main() {
+
+    tracing_subscriber::fmt::init();
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on( async {
+        tokio::spawn(async { Node::start("1234").await });
+        tokio::spawn(async { Node::start("1235").await });
+        tokio::spawn(async { Node::start("1236").await });
+        loop {
+            tokio::time::sleep(Duration::MAX).await;
+        }
+    });
 }
 
 
@@ -28,8 +39,10 @@ mod tests {
     use state::{Command, Transaction};
 
 
+    /// Assuming that nodes has started during performing this test
     #[tokio::test]
     async fn start_blockchain_and_send_transactions() {
+
         let client1 = Client::new();
         let client2 = Client::new();
         let client3 = Client::new();
@@ -49,27 +62,30 @@ mod tests {
                 client1.send_transaction_to_network(
                     serialize_data(transactions1.remove(i)))
                     .await;
-                thread::sleep(Duration::from_millis(200));
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                println!("transactions 1 sent to nodes")
             }
-        });
-        thread::sleep(Duration::from_secs(2));
+        }).await;
+
         tokio::spawn(async move {
             for i in 0..transactions2.len() {
                 client2.send_transaction_to_network(
                     serialize_data(transactions2.remove(i)))
                     .await;
-                thread::sleep(Duration::from_millis(200));
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                println!("transactions 2 sent to nodes")
             }
-        });
-        thread::sleep(Duration::from_secs(2));
+        }).await;
+
         tokio::spawn(async move {
             for i in 0..transactions3.len() {
                 client3.send_transaction_to_network(
                     serialize_data(transactions3.remove(i)))
                     .await;
-                thread::sleep(Duration::from_millis(200));
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                println!("transactions 3 sent to nodes")
             }
-        });
+        }).await;
     }
 
     fn generate_transaction() -> Transaction {

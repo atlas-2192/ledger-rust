@@ -10,6 +10,7 @@ use std::convert::{TryFrom};
 use std::fmt::{Display, Formatter};
 use derive_more::{AsMut, AsRef, Display};
 use serde::{Deserialize, Serialize};
+use tracing::{error, trace};
 use errors::LedgerError;
 use errors::LedgerError::CommandError;
 use state::{Block, Transaction};
@@ -74,7 +75,7 @@ impl TryFrom<(u8, u8)> for NetworkEvent {
     fn try_from(value: (u8, u8)) -> Result<Self, Self::Error> {
         match value.0 {
             (1u8) => {
-                println!("SendEvent");
+                trace!("SendEvent");
                 let send_event = match value.1 {
                     1 => SendEvent::SendBlock,
                     2 => SendEvent::SendTransaction,
@@ -85,11 +86,11 @@ impl TryFrom<(u8, u8)> for NetworkEvent {
                         return Err(CommandError)
                     },
                 };
-                println!("NetworkEvent = {}", &send_event);
+                trace!("NetworkEvent = {}", &send_event);
                 Ok(NetworkEvent::Send(send_event))
             },
             (2u8) => {
-                println!("ReceiveEvent");
+                trace!("ReceiveEvent");
                 let receive_event = match value.1 {
                     1 => ReceiveEvent::ReceiveBlock,
                     2 => ReceiveEvent::ReceiveTransaction,
@@ -100,11 +101,11 @@ impl TryFrom<(u8, u8)> for NetworkEvent {
                         return Err(CommandError)
                     },
                 };
-                println!("NetworkEvent = {}", &receive_event);
+                trace!("NetworkEvent = {}", &receive_event);
                 Ok(NetworkEvent::Receive(receive_event))
             },
             _ => {
-                println!("NetworkEvent ERROR");
+                trace!("NetworkEvent ERROR");
                 Err(CommandError)
             },
         }
@@ -172,10 +173,10 @@ async fn send_command_and_data(
     let mut buf: [u8; 1] = [0u8];
     read_exact_async(socket, &mut buf).await?;
     if buf[0] == 1 {
-        println!("SendBlock success");
+        error!("SendBlock success");
         return Ok(())
     } else {
-        println!("SendBlock failure");
+        error!("SendBlock failure");
         return Err(Error::from(ErrorKind::NetworkDown))
     };
 }
@@ -220,7 +221,7 @@ async fn receive_event_and_data(
             let block = deserialize_data(data_buf.as_slice());
             if block.is_ok() {
                 data = (Data::Block(block.unwrap()));
-                println!("block has been received...");
+                //println!("block has been received...");
             } else {
                 return Err(LedgerError::NetworkError);
             }
@@ -229,7 +230,7 @@ async fn receive_event_and_data(
             let transaction = deserialize_data(data_buf.as_slice());
             if transaction.is_ok() {
                 data = (Data::Transaction(transaction.unwrap()));
-                println!("transaction has been received...");
+                //println!("transaction has been received...");
             } else {
                 return Err(LedgerError::NetworkError);
             }
@@ -238,7 +239,7 @@ async fn receive_event_and_data(
             let peer = deserialize_data(data_buf.as_slice());
             if peer.is_ok() {
                 data = (Data::Peer(peer.unwrap()));
-                println!("peer has been received...");
+                //println!("peer has been received...");
             } else {
                 return Err(LedgerError::NetworkError);
             }
@@ -247,7 +248,7 @@ async fn receive_event_and_data(
             let peers = deserialize_data(data_buf.as_slice());
             if peers.is_ok() {
                 data = (Data::Peers(peers.unwrap()));
-                println!("peers have been received...");
+                //println!("peers have been received...");
             } else {
                 return Err(LedgerError::NetworkError);
             }
@@ -263,10 +264,10 @@ async fn write_response(socket: &TcpStream) -> bool {
     let mut buf: [u8; 1] = [1u8];
     let res = write_all_async(socket, &mut buf).await;
     if res.is_ok() {
-        println!("write_response ok");
+        trace!("write_response ok");
         true
     } else {
-        println!("write_response failed");
+        trace!("write_response failed");
         false
     }
 }

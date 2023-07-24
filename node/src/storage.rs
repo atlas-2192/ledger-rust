@@ -1,3 +1,4 @@
+use tracing::error;
 use ursa::keys::PublicKey;
 use state::{Accounts, Assets, Block, MAX_TRANSACTIONS_IN_BLOCK};
 use network::{Data, serialize_data};
@@ -57,19 +58,19 @@ impl Storage {
             return Err(LedgerError::BlockError)
         }
         if block.id > 1 {
-            println!("invalid block id: {}", &block.id);
+            error!("invalid block id: {}", &block.id);
             return Err(LedgerError::BlockError)
         }
         if block.previous_block_hash.is_some() {
-            println!("this is not genesis block");
+            error!("this is not genesis block");
             return Err(LedgerError::BlockError)
         }
         if block.transactions.len() > MAX_TRANSACTIONS_IN_BLOCK {
-            println!("transactions count exceeded: {}", &block.transactions.len());
+            error!("transactions count exceeded: {}", &block.transactions.len());
             return Err(LedgerError::BlockError)
         }
         if !Self::validate_hash(&block) {
-            println!("invalid block hash: {}", print_bytes(&block.hash));
+            error!("invalid block hash: {}", print_bytes(&block.hash));
             return Err(LedgerError::BlockError)
         }
         self.blockchain.push(block);
@@ -78,25 +79,25 @@ impl Storage {
 
     fn validate_block(&self, block: &Block, previous_block: &Block) -> bool {
         if block.id != previous_block.id - 1 {
-            println!("invalid block id: {}", &block.id);
+            error!("invalid block id: {}", &block.id);
             return false
         }
         if &previous_block.hash != block.previous_block_hash.as_ref().unwrap() {
-            println!("invalid previous block hash: {}", print_bytes(&previous_block.hash));
+            error!("invalid previous block hash: {}", print_bytes(&previous_block.hash));
             return false
         }
         if block.transactions.len() > MAX_TRANSACTIONS_IN_BLOCK {
-            println!("transactions count exceeded: {}", &block.transactions.len());
+            error!("transactions count exceeded: {}", &block.transactions.len());
             return false
         }
         if convert_timestamp_to_day_time(block.timestamp)
             <=
            convert_timestamp_to_day_time(previous_block.timestamp) {
-            println!("invalid block timestamp: {}", &block.timestamp);
+            error!("invalid block timestamp: {}", &block.timestamp);
             return false
         }
         if !Self::validate_hash(&block) {
-            println!("invalid block hash: {}", print_bytes(&block.hash));
+            error!("invalid block hash: {}", print_bytes(&block.hash));
             return false
         }
         // TODO check signature ?

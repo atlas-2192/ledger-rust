@@ -7,6 +7,7 @@ use tokio::sync::mpsc::{
     Sender as Tx
 };
 use async_trait::async_trait;
+use tracing::{error, info, trace};
 use crate::sender::Sender;
 
 /// structure for connecting modules together
@@ -40,7 +41,7 @@ impl Connector {
         })
             .await;
         if started.is_err() {
-            println!("connector error: {}", started.err().unwrap())
+            error!("connector error: {}", started.err().unwrap())
         }
     }
 
@@ -61,11 +62,11 @@ impl Connector {
                     while let Some(data) = miner_rx.recv().await {
                         match data.data_type() {
                             1 => {
-                                println!("get block from miner: {}", &data);
+                                info!("get block from miner: {}", &data);
                                 let sender_tx = sender_tx.clone();
                                 Self::send_data(sender_tx, data).await;
                             }
-                            _ => { println!("received wrong data type: {}", data) }
+                            _ => { error!("received wrong data type: {}", data) }
                         }
                     }
                 }
@@ -78,7 +79,7 @@ impl Connector {
                 let receiver_rx = receiver_rx.as_mut();
                 if let Some(receiver_rx) = receiver_rx {
                     while let Some(data) = receiver_rx.recv().await {
-                        println!("get data from receiver: {}", &data);
+                        trace!("get data from receiver: {}", &data);
                         match data.data_type() {
                             1 | 2 => {
                                 let miner_tx = miner_tx.clone();
@@ -92,7 +93,7 @@ impl Connector {
                         }
                     }
                 }
-                println!("listen_incoming() - there is no receiver") // unreachable ?
+                error!("listen_incoming() - there is no receiver")
             };
         });
     }
@@ -103,9 +104,9 @@ impl Connector {
         let tx = tx.as_mut();
         if let Some(tx) = tx {
             if let Err(e) = tx.send(data).await {
-                println!("send_data() error: {}", e)
+                error!("send_data() error: {}", e)
             } else {
-                println!("data sent successfully")
+                trace!("data sent successfully")
             }
         }
     }
@@ -115,16 +116,6 @@ impl Connector {
 pub trait Connect {
     async fn connect(&mut self, connector: Arc<Mutex<Connector>>);
 }
-
-// #[async_trait]
-// impl Connect for Storage {
-//     async fn connect(&mut self, connector: Arc<Mutex<Connector>>) {
-//         let mut connector = connector.lock().await;
-//         let (tx, rx): (Tx<Data>, Rx<Data>) = channel(10);
-//         self.connector_rx = Some(rx);
-//         connector.storage_tx = Arc::new(Mutex::new(Some(tx)));
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -138,9 +129,6 @@ mod tests {
     use client::Client;
     use crate::connector::{Connect, Connector};
 
-    // pub async fn set_up_peer() -> Peer {
-    //
-    // }
 
     #[tokio::test]
     async fn test_channel() {

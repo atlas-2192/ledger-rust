@@ -27,6 +27,7 @@ use network::Data;
 use state::{Block, Transaction};
 use utils::print_bytes;
 use async_trait::async_trait;
+use tracing::{error, info, trace};
 use crate::connector::{Connect, Connector};
 use crate::storage::Storage;
 
@@ -34,7 +35,7 @@ use crate::storage::Storage;
 pub(crate) struct Miner {
     public_key: PublicKey,
     private_key: PrivateKey,
-    transaction_pool: TransactionPool,
+    transaction_pool: Arc<Mutex<TransactionPool>>,
     storage: Arc<Mutex<Storage>>,
     pub(crate) connector_rx: Arc<Mutex<Option<Rx<Data>>>>,
     pub(crate) connector_tx: Arc<Mutex<Option<Tx<Data>>>>,
@@ -53,7 +54,7 @@ impl TransactionPool {
         }
     }
 
-    fn add_transaction_to_pool(&mut self, transaction: Transaction) {
+    pub fn add_transaction_to_pool(&mut self, transaction: Transaction) {
         let mut transactions = self.transactions.lock().unwrap();
         transactions.push(transaction);
     }
@@ -83,7 +84,6 @@ impl Future for TransactionPool {
                         thread::sleep(Duration::from_secs(3));
                         waker.wake();
                     }
-                    println!("transactions length >= 10");
                 });
                 return Poll::Pending
             }
@@ -99,7 +99,7 @@ impl Miner {
         Self {
             public_key,
             private_key,
-            transaction_pool: TransactionPool::new(),
+            transaction_pool: Arc::new(Mutex::new(TransactionPool::new())),
             storage: Arc::new(Mutex::new(Storage::new())),
             connector_rx: Arc::new(Mutex::new(None)),
             connector_tx: Arc::new(Mutex::new(None)),
@@ -110,6 +110,7 @@ impl Miner {
         let connector_rx = self.connector_rx.clone();
         let connector_tx = self.connector_tx.clone();
         let storage = self.storage.clone();
+        let transaction_pool = self.transaction_pool.clone();
         // get block from other node
         tokio::spawn(async move {
             loop {
@@ -119,6 +120,7 @@ impl Miner {
                 while let Some(data) = connector_rx.recv().await {
                     match data {
                         Data::Block(block) => {
+                            info!("received block from other node: {}", &block);
                             let storage = storage.clone();
                             let mut storage = storage.lock().await;
                             let added_block = storage.try_add_block(block);
@@ -126,7 +128,13 @@ impl Miner {
                                 println!("error while adding block: {}", added_block.err().unwrap())
                             }
                         }
-                        _ => { println!("received wrong data type") }
+                        Data::Transaction(transaction) => {
+                            info!("received transaction from other node: {}", &transaction);
+                            let t_p = transaction_pool.clone();
+                            let mut t_p = t_p.lock().await;
+                            t_p.add_transaction_to_pool(transaction);
+                        }
+                        _ => { error!("received wrong data type") }
                     }
                 }
             }
@@ -150,7 +158,8 @@ impl Miner {
                 }
             };
             let private_key = self.private_key.clone();
-            let transactions = self.transaction_pool.transactions.clone();
+            let transaction_pool = self.transaction_pool.lock().await;
+            let transactions = transaction_pool.transactions.clone();
             let ready_to_mine = async {
                 TransactionPool { transactions }.await
             }
@@ -168,7 +177,7 @@ impl Miner {
                 .unwrap();
             let added_block = storage.try_add_block(block.clone());
             if added_block.is_err() {
-                println!("failed to add self-mined block");
+                trace!("failed to add self-mined block");
             } else {
                 let connector_tx = connector_tx.clone();
                 let mut connector_tx = connector_tx.lock().await;
@@ -176,21 +185,25 @@ impl Miner {
                 let data = Data::Block(block);
                 let sent_block = connector_tx.send(data).await;
                 if sent_block.is_err() {
-                    println!("error while sending block to connector: {}", sent_block.err().unwrap())
+                    error!("error while sending block to connector: {}", sent_block.err().unwrap())
+                } else {
+                    trace!("block sent to connector");
                 }
             }
         }
     }
 
-    pub fn add_transaction_to_pool(&mut self, transaction: Transaction) {
-        self.transaction_pool.add_transaction_to_pool(transaction);
-    }
+    /// FOR TEST
+    // async fn add_transaction_to_pool(transaction_pool: Arc<Mutex<TransactionPool>>,
+    //                                  transaction: Transaction) {
+    //     transaction_pool.lock().await.add_transaction_to_pool(transaction);
+    // }
 
     /// FOR TEST ONLY
     async fn add_block_to_storage(&mut self, block: Block) {
         let mut storage = self.storage.lock().await;
         if let Err(_) = storage.try_add_block(block) {
-           println!("could not add block to storage")
+           error!("could not add block to storage")
         };
     }
 
@@ -232,11 +245,11 @@ impl Miner {
             nonce += 1;
         };
         let finish = Utc::now();
-        println!("success!!!, total time = {} sec", finish.second() - start.second());
-        println!("hash: {}, nonce: {}", print_bytes(&hash), &nonce);
+        info!("success!!!, total time = {} sec", finish.second() - start.second());
+        info!("hash: {}, nonce: {}", print_bytes(&hash), &nonce);
         block.nonce = nonce;
         block.hash = hash;
-        println!("block: {}", &block);
+        info!("block: {}", &block);
         block
     }
 }
@@ -310,7 +323,7 @@ mod tests {
         tokio::spawn(async move {
             for _ in 0..10 {
                 let mut miner3 = miner3.lock().await;
-                miner3.add_transaction_to_pool(generate_transaction());
+                //miner3.add_transaction_to_pool(generate_transaction());
             }
         })
             .await

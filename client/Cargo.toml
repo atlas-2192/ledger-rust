@@ -10,6 +10,8 @@ tokio = { version = "1.28.0", features = ["net", "macros", "rt-multi-thread", "i
 tokio-io = { version = "0.1.13" }
 futures = "0.3.28"
 
+tracing = "0.1.37"
+
 state = { path = "../state" }
 network = { path = "../network_protocol" }
 crypto = { path = "../crypto"}
