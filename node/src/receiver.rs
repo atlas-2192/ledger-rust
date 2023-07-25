@@ -34,7 +34,7 @@ impl Receiver {
     pub async fn run(&mut self) {
         loop {
             while let Ok((mut socket, addr)) = self.listener.accept().await {
-                trace!("accepted socket : {addr}");
+                //trace!("accepted socket : {addr}");
                 let processed = Self::process_incoming(self, &mut socket).await;
                 if processed.is_err() {
                     error!("error processing incoming data")

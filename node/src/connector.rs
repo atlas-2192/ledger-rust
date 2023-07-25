@@ -79,7 +79,7 @@ impl Connector {
                 let receiver_rx = receiver_rx.as_mut();
                 if let Some(receiver_rx) = receiver_rx {
                     while let Some(data) = receiver_rx.recv().await {
-                        trace!("get data from receiver: {}", &data);
+                        //trace!("get data from receiver: {}", &data);
                         match data.data_type() {
                             1 | 2 => {
                                 let miner_tx = miner_tx.clone();
@@ -106,7 +106,7 @@ impl Connector {
             if let Err(e) = tx.send(data).await {
                 error!("send_data() error: {}", e)
             } else {
-                trace!("data sent successfully")
+                //trace!("data sent successfully")
             }
         }
     }
@@ -134,7 +134,7 @@ mod tests {
     async fn test_channel() {
         let address = SocketAddr::from_str((String::from(LOCAL_HOST) + "1234").as_str()).unwrap();
         let mut receiver = crate::receiver::Receiver::new(address).await;
-        let mut miner = crate::miner::Miner::new();
+        let mut miner = crate::miner::Miner::new(1);
         //miner.run().await;
         let connector = Arc::new(Mutex::new(Connector::new()));
         let connector1 = connector.clone();

@@ -47,45 +47,59 @@ mod tests {
         let client2 = Client::new();
         let client3 = Client::new();
 
-        let mut transactions1 = [0u8..10u8].iter()
-            .map(|_| generate_transaction())
-            .collect::<Vec<Transaction>>();
-        let mut transactions2 = [0u8..10u8].iter()
-            .map(|_| generate_transaction())
-            .collect::<Vec<Transaction>>();
-        let mut transactions3 = [0u8..10u8].iter()
-            .map(|_| generate_transaction())
-            .collect::<Vec<Transaction>>();
+        let mut transactions1 = Vec::with_capacity(10);
+        for _ in 0..transactions1.capacity() {
+            transactions1.push(generate_transaction());
+        };
 
+        let mut transactions2 = Vec::with_capacity(10);
+        for _ in 0..transactions2.capacity() {
+            transactions2.push(generate_transaction());
+        };
+
+        let mut transactions3 = Vec::with_capacity(10);
+        for _ in 0..transactions3.capacity() {
+            transactions3.push(generate_transaction());
+        };
+
+        let mut count = 0;
         tokio::spawn(async move {
             for i in 0..transactions1.len() {
+                let transaction = transactions1.get(i).unwrap();
                 client1.send_transaction_to_network(
-                    serialize_data(transactions1.remove(i)))
+                    serialize_data(transaction))
                     .await;
                 tokio::time::sleep(Duration::from_secs(2)).await;
-                println!("transactions 1 sent to nodes")
+                println!("transactions 1 sent to nodes {}", count);
+                count += 1;
             }
-        }).await;
+        }).await.expect("TODO: panic message 1");;
 
+        let mut count = 0;
         tokio::spawn(async move {
             for i in 0..transactions2.len() {
+                let transaction = transactions2.get(i).unwrap();
                 client2.send_transaction_to_network(
-                    serialize_data(transactions2.remove(i)))
+                    serialize_data(transaction))
                     .await;
                 tokio::time::sleep(Duration::from_secs(2)).await;
-                println!("transactions 2 sent to nodes")
+                println!("transactions 2 sent to nodes {}", count);
+                count += 1;
             }
-        }).await;
+        }).await.expect("TODO: panic message 2");;
 
+        let mut count = 0;
         tokio::spawn(async move {
             for i in 0..transactions3.len() {
+                let transaction = transactions3.get(i).unwrap();
                 client3.send_transaction_to_network(
-                    serialize_data(transactions3.remove(i)))
+                    serialize_data(transaction))
                     .await;
                 tokio::time::sleep(Duration::from_secs(2)).await;
-                println!("transactions 3 sent to nodes")
+                println!("transactions 3 sent to nodes {}", count);
+                count += 1;
             }
-        }).await;
+        }).await.expect("TODO: panic message 3");
     }
 
     fn generate_transaction() -> Transaction {

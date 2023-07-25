@@ -12,7 +12,7 @@ use tokio::sync::mpsc::{
 };
 use std::thread;
 use std::time::Duration;
-use tokio::sync::{Mutex, TryLockError};
+use tokio::sync::{Mutex, MutexGuard, TryLockError};
 use blake2::{Blake2s, Blake2s256, Digest};
 use chrono::{Timelike, Utc};
 //use futures::channel::mpsc;
@@ -33,6 +33,7 @@ use crate::storage::Storage;
 
 #[derive(Debug)]
 pub(crate) struct Miner {
+    id: u64,
     public_key: PublicKey,
     private_key: PrivateKey,
     transaction_pool: Arc<Mutex<TransactionPool>>,
@@ -43,33 +44,35 @@ pub(crate) struct Miner {
 
 #[derive(Debug)]
 struct TransactionPool {
+    miner_id: u64,
     transactions: Arc<Mutex<BinaryHeap<Transaction>>>,
 }
 
 impl TransactionPool {
 
-    fn new() -> Self {
+    fn new(miner_id: u64) -> Self {
         Self {
+            miner_id,
             transactions: Arc::new(Mutex::new(BinaryHeap::new())),
         }
     }
 
-    pub fn add_transaction_to_pool(&mut self, transaction: Transaction) {
+    pub fn add_transaction_to_pool(&mut self, transaction: Transaction, id: u64) {
         let transactions = self.transactions.try_lock();
         while let Err(_) = transactions {
-            warn!("transaction pool lock is already acquired")
+            warn!("add_transaction_to_pool() transaction pool lock is already acquired")
         }
         let mut transactions = transactions.unwrap();
         transactions.push(transaction);
+        info!("miner id: {}, transactions length: {}", id, transactions.len())
     }
 
-    fn transactions_len(&self) -> usize {
+    fn transactions_len(&self, id: u64) -> usize {
         let transactions = self.transactions.try_lock();
         while let Err(_) = transactions {
-            warn!("transaction pool lock is already acquired")
+            warn!("transactions_len() transaction pool lock is already acquired")
         }
-        let mut transactions = transactions.unwrap();
-        transactions.len()
+        transactions.as_ref().unwrap().len()
     }
 }
 
@@ -77,17 +80,21 @@ impl Future for TransactionPool {
     type Output = Vec<Transaction>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.transactions_len() {
+        let id = self.miner_id;
+        //trace!("poll transaction_pool feature , miner_id : {}", &id);
+        let len = self.transactions_len(id);
+        match len {
             len if len > 9 => {
-                trace!("transactions length > 9");
+                info!("transactions length > 9");
                 let transactions = self.transactions.clone();
                 let transactions = transactions.try_lock();
                 return if let Ok(mut transactions) = transactions {
                     let mut ready_transactions = Vec::with_capacity(10);
-                    for _ in 0..transactions.len() {
+                    for _ in 0..10 {
                         let transaction = transactions.pop().unwrap();
                         ready_transactions.push(transaction);
                     }
+                    info!("transactions are ready to mine");
                     Poll::Ready(ready_transactions)
                 } else {
                     cx.waker().clone().wake();
@@ -95,24 +102,11 @@ impl Future for TransactionPool {
                 }
             }
             len if len < 10 => {
-                let transactions = self.transactions.clone();
-                let waker = cx.waker().clone();
-                thread::spawn(move || {
-                    let transactions = transactions.try_lock();
-                    match transactions {
-                        Ok(mutex_guard) => {
-                            warn!("transactions lock ACQUIRED");
-                            thread::sleep(Duration::from_secs(3));
-                            waker.clone().wake();
-                        }
-                        Err(ref e) => {
-                            warn!("transactions lock is already acquired: {}", e);
-                            thread::sleep(Duration::from_secs(1));
-                            waker.clone().wake();
-                        }
-                    };
-                    warn!("transactions lock RELEASED");
-                });
+                let _ = thread::spawn(move || {
+                    thread::sleep(Duration::from_secs(5));
+                })
+                    .join();
+                cx.waker().clone().wake();
                 return Poll::Pending
             }
             _ => { unreachable!() }
@@ -122,59 +116,93 @@ impl Future for TransactionPool {
 
 impl Miner {
 
-    pub fn new() -> Self {
+    pub fn new(id: u64) -> Self {
         let (public_key, private_key) = Ed25519Sha512::new().keypair(None).unwrap();
         Self {
+            id,
             public_key,
             private_key,
-            transaction_pool: Arc::new(Mutex::new(TransactionPool::new())),
+            transaction_pool: Arc::new(Mutex::new(TransactionPool::new(id))),
             storage: Arc::new(Mutex::new(Storage::new())),
             connector_rx: Arc::new(Mutex::new(None)),
             connector_tx: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub async fn run(&mut self) {
-        let connector_rx = self.connector_rx.clone();
+    pub async fn run(&self) {
         let connector_tx = self.connector_tx.clone();
-        let storage = self.storage.clone();
-        let transaction_pool = self.transaction_pool.clone();
-        // get block from other node
+        let connector_rx = self.connector_rx.clone();
+        let storage1 = self.storage.clone();
+        let storage2 = self.storage.clone();
+        let transaction_pool_1 = self.transaction_pool.clone();
+        let transaction_pool_2 = self.transaction_pool.clone();
+        let id = self.id;
+        let private_key = self.private_key.clone();
         tokio::spawn(async move {
-            loop {
-                let connector_rx = connector_rx.clone();
-                let mut connector_rx = connector_rx.lock().await;
-                let connector_rx = connector_rx.as_mut().unwrap();
-                while let Some(data) = connector_rx.recv().await {
-                    match data {
-                        Data::Block(block) => {
-                            info!("received block from other node: {}", &block);
-                            let storage = storage.clone();
-                            let mut storage = storage.lock().await;
-                            let added_block = storage.try_add_block(block);
-                            if added_block.is_err() {
-                                println!("error while adding block: {}", added_block.err().unwrap())
-                            }
-                        }
-                        Data::Transaction(transaction) => {
-                            info!("received transaction from other node: {}", &transaction);
-                            let transaction_pool = transaction_pool.clone();
-                            tokio::task::block_in_place(move || {
-                                let mut transaction_pool = transaction_pool.blocking_lock();
-                                info!("transaction_pool guard acquired");
-                                transaction_pool.add_transaction_to_pool(transaction);
-                            });
+            Self::run_listening(
+                id,
+                connector_rx,
+                storage1,
+                transaction_pool_1)
+                .await;
+        }); //.await
+        //tokio::spawn(async move {
+            Self::run_mining(
+                id,
+                connector_tx,
+                storage2,
+                &private_key,
+                transaction_pool_2)
+                .await;
+        //}).await;
+    }
 
+    async fn run_listening(
+        id: u64,
+        connector_rx: Arc<Mutex<Option<Rx<Data>>>>,
+        storage: Arc<Mutex<Storage>>,
+        transaction_pool: Arc<Mutex<TransactionPool>>)
+    {
+        loop {
+            let connector_rx = connector_rx.clone();
+            let mut connector_rx = connector_rx.lock().await;
+            let connector_rx = connector_rx.as_mut().unwrap();
+            while let Some(data) = connector_rx.recv().await {
+                match data {
+                    // receive block from other node
+                    Data::Block(block) => {
+                        info!("received block from other node: {}", &block);
+                        let storage = storage.clone();
+                        let mut storage = storage.lock().await;
+                        let added_block = storage.try_add_block(block);
+                        if added_block.is_err() {
+                            println!("error while adding block: {}", added_block.err().unwrap())
                         }
-                        _ => { error!("received wrong data type") }
                     }
+                    // receive transaction from client
+                    Data::Transaction(transaction) => {
+                        info!("miner_id: {}, received transaction: {}", &id, &transaction);
+                        let transaction_pool = transaction_pool.clone();
+                        let mut transaction_pool = transaction_pool.lock().await;
+                        info!("transaction_pool guard acquired");
+                        transaction_pool.add_transaction_to_pool(transaction, id);
+                    }
+                    _ => { error!("received wrong data type") }
                 }
             }
-        });
+        }
+    }
 
+    async fn run_mining(
+        id: u64,
+        connector_tx: Arc<Mutex<Option<Tx<Data>>>>,
+        storage: Arc<Mutex<Storage>>,
+        private_key: &PrivateKey,
+        transaction_pool: Arc<Mutex<TransactionPool>>
+    ) {
         // mine block from received transactions
         loop {
-            let storage = self.storage.clone();
+            let storage = storage.clone();
             let mut storage = storage.lock().await;
             let previous_block = storage.get_blockchain_by_ref().last();
             let previous_block_id;
@@ -189,15 +217,15 @@ impl Miner {
                     previous_block_hash = Some(p_b.hash.clone());
                 }
             };
-            let private_key = self.private_key.clone();
-            let transaction_pool = self.transaction_pool.lock().await;
+            let private_key = private_key.clone();
+            let transaction_pool = transaction_pool.lock().await;
             let transactions = transaction_pool.transactions.clone();
             let ready_to_mine = async {
-                TransactionPool { transactions }.await
+                TransactionPool { transactions , miner_id: id}.await
             }
                 .await;
-
-            let block = thread::spawn(move || {
+            info!("10 transactions were received from transaction pool");
+            let block = tokio::task::spawn_blocking(move || {
                 Self::mine_block(
                     private_key,
                     2,
@@ -205,8 +233,9 @@ impl Miner {
                     previous_block_id,
                     ready_to_mine)
             })
-                .join()
+                .await
                 .unwrap();
+            info!("block has been successfully mined");
             let added_block = storage.try_add_block(block.clone());
             if added_block.is_err() {
                 trace!("failed to add self-mined block");
@@ -321,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     async fn mine_block_succeed() {
-        let mut miner = Miner::new();
+        let mut miner = Miner::new(1);
         miner.run().await;
         let previous_block_transactions = vec![generate_transaction()];
         let previous_block = generate_block(2, previous_block_transactions);
@@ -338,7 +367,7 @@ mod tests {
 
     #[tokio::test]
     async fn receive_transactions_and_start_mine_block_succeed() {
-        let miner = Arc::new(Mutex::new(Miner::new()));
+        let miner = Arc::new(Mutex::new(Miner::new(1)));
         let miner1 = miner.clone();
         let miner3 = miner.clone();
         let previous_block_transactions = vec![generate_transaction(), generate_transaction()];

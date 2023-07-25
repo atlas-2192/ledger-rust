@@ -264,7 +264,7 @@ async fn write_response(socket: &TcpStream) -> bool {
     let mut buf: [u8; 1] = [1u8];
     let res = write_all_async(socket, &mut buf).await;
     if res.is_ok() {
-        trace!("write_response ok");
+        //trace!("write_response ok");
         true
     } else {
         trace!("write_response failed");
