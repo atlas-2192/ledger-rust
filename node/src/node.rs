@@ -55,9 +55,9 @@ impl Node {
         });
         tokio::spawn(async move {
             let miner = miner2.lock().await;
-            miner.run().await
+            miner.run().await;
         });
 
-        event!(Level::INFO, "node started");
+        event!(Level::INFO, "node started on 127.0.0.1:{}", local_port);
     }
 }

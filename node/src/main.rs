@@ -70,7 +70,6 @@ mod tests {
                     serialize_data(transaction))
                     .await;
                 tokio::time::sleep(Duration::from_secs(2)).await;
-                println!("transactions 1 sent to nodes {}", count);
                 count += 1;
             }
         }).await.expect("TODO: panic message 1");;
@@ -83,7 +82,6 @@ mod tests {
                     serialize_data(transaction))
                     .await;
                 tokio::time::sleep(Duration::from_secs(2)).await;
-                println!("transactions 2 sent to nodes {}", count);
                 count += 1;
             }
         }).await.expect("TODO: panic message 2");;
@@ -96,7 +94,6 @@ mod tests {
                     serialize_data(transaction))
                     .await;
                 tokio::time::sleep(Duration::from_secs(2)).await;
-                println!("transactions 3 sent to nodes {}", count);
                 count += 1;
             }
         }).await.expect("TODO: panic message 3");

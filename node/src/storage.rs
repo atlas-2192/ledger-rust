@@ -109,7 +109,7 @@ impl Storage {
     }
 
     fn validate_hash(block: &Block) -> bool {
-        let hash = crypto::hash(serialize_data(block).as_slice());
+        let hash = crypto::hash(block).as_slice();
         hash == block.hash
     }
 
