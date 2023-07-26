@@ -1,20 +1,19 @@
-use std::borrow::BorrowMut;
-use std::collections::HashMap;
-use crate::miner::Miner;
-use crate::receiver::Receiver;
-use crate::sender::Sender;
-use crate::storage::Storage;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::ops::DerefMut;
 use std::str::FromStr;
 use std::sync::{Arc, MutexGuard};
 //use std::sync::Mutex;
 use std::thread;
+
 use queues::{Queue, queue};
-use network::Data;
 use tokio::sync::Mutex;
-use tracing::{event, span, Level};
+use tracing::{event, Level, span};
+
+use network::Data;
+
 use crate::connector::{Connect, Connector};
+use crate::miner::Miner;
+use crate::receiver::Receiver;
+use crate::sender::Sender;
 
 const LOCAL_HOST: &str = "127.0.0.1:";
 

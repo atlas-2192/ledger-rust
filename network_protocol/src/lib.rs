@@ -5,10 +5,9 @@ use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};
 use bincode::{DefaultOptions, Options};
 use tokio::net::{TcpStream};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use std::convert::{TryFrom};
 use std::fmt::{Display, Formatter};
-use derive_more::{AsMut, AsRef, Display};
+use derive_more::{Display};
 use serde::{Deserialize, Serialize};
 use tracing::{error, trace};
 use errors::LedgerError;
@@ -74,7 +73,7 @@ impl TryFrom<(u8, u8)> for NetworkEvent {
 
     fn try_from(value: (u8, u8)) -> Result<Self, Self::Error> {
         match value.0 {
-            (1u8) => {
+            1u8 => {
                 trace!("SendEvent");
                 let send_event = match value.1 {
                     1 => SendEvent::SendBlock,
@@ -89,7 +88,7 @@ impl TryFrom<(u8, u8)> for NetworkEvent {
                 trace!("NetworkEvent = {}", &send_event);
                 Ok(NetworkEvent::Send(send_event))
             },
-            (2u8) => {
+            2u8 => {
                 trace!("ReceiveEvent");
                 let receive_event = match value.1 {
                     1 => ReceiveEvent::ReceiveBlock,
@@ -220,7 +219,7 @@ async fn receive_event_and_data(
         ReceiveEvent::ReceiveBlock => {
             let block = deserialize_data(data_buf.as_slice());
             if block.is_ok() {
-                data = (Data::Block(block.unwrap()));
+                data = Data::Block(block.unwrap());
                 //println!("block has been received...");
             } else {
                 return Err(LedgerError::NetworkError);
@@ -229,7 +228,7 @@ async fn receive_event_and_data(
         ReceiveEvent::ReceiveTransaction => {
             let transaction = deserialize_data(data_buf.as_slice());
             if transaction.is_ok() {
-                data = (Data::Transaction(transaction.unwrap()));
+                data = Data::Transaction(transaction.unwrap());
                 //println!("transaction has been received...");
             } else {
                 return Err(LedgerError::NetworkError);
@@ -238,7 +237,7 @@ async fn receive_event_and_data(
         ReceiveEvent::AddPeer => {
             let peer = deserialize_data(data_buf.as_slice());
             if peer.is_ok() {
-                data = (Data::Peer(peer.unwrap()));
+                data = Data::Peer(peer.unwrap());
                 //println!("peer has been received...");
             } else {
                 return Err(LedgerError::NetworkError);
@@ -247,7 +246,7 @@ async fn receive_event_and_data(
         ReceiveEvent::ReceivePeers => {
             let peers = deserialize_data(data_buf.as_slice());
             if peers.is_ok() {
-                data = (Data::Peers(peers.unwrap()));
+                data = Data::Peers(peers.unwrap());
                 //println!("peers have been received...");
             } else {
                 return Err(LedgerError::NetworkError);

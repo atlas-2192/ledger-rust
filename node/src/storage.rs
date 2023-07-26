@@ -1,9 +1,12 @@
+use core::slice::SlicePattern;
+use blake2::Digest;
 use tracing::error;
 use ursa::keys::PublicKey;
 use state::{Accounts, Assets, Block, MAX_TRANSACTIONS_IN_BLOCK};
-use network::{Data, serialize_data};
+use network::{Data};
 
 use crypto;
+use crypto::hash;
 use errors::LedgerError;
 use utils::{print_bytes, convert_timestamp_to_day_time};
 
@@ -109,8 +112,13 @@ impl Storage {
     }
 
     fn validate_hash(block: &Block) -> bool {
-        let hash = crypto::hash(block).as_slice();
-        hash == block.hash
+        let mut block_to_validate = block.clone();
+        block_to_validate.hash = vec![];
+        block_to_validate.nonce -= 1;
+        let hash_data = bincode::serialize::<Block>(&block_to_validate).unwrap();
+        let h = hash(hash_data.as_slice());
+        block_to_validate.hash.extend_from_slice(&h);
+        block_to_validate.hash == block.hash
     }
 
     // fn validate_signature(signature: &Vec<u8>, public_key: &PublicKey) -> bool {

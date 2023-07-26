@@ -35,7 +35,7 @@ impl Eq for Transaction {}
 
 impl PartialEq<Self> for Transaction {
     fn eq(&self, other: &Self) -> bool {
-        todo!()
+        self.fee == other.fee
     }
 }
 

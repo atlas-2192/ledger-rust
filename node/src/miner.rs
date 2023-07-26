@@ -1,13 +1,12 @@
 use std::collections::BinaryHeap;
-use std::sync::{Arc, TryLockResult};
+use std::sync::{Arc};
 use tokio::sync::mpsc::{
     channel,
     Receiver as Rx,
     Sender as Tx
 };
 use std::time::Duration;
-use tokio::sync::{Mutex, MutexGuard, TryLockError};
-use blake2::{ Blake2s256, Digest};
+use tokio::sync::{Mutex};
 use chrono::{Timelike, Utc};
 //use futures::channel::mpsc;
 //use futures::channel::mpsc::{Sender, Receiver};
@@ -21,6 +20,7 @@ use network::Data;
 use state::{Block, Transaction};
 use utils::print_bytes;
 use async_trait::async_trait;
+use blake2::Digest;
 use tracing::{error, info, trace, warn};
 use crate::connector::{Connect, Connector};
 use crate::storage::Storage;
@@ -244,7 +244,7 @@ impl Miner {
             .sign(format!("{:?}", &transactions).as_bytes(), &private_key)
             .unwrap();
         let mut nonce = 0;
-        let mut hash = vec![1,1,1];
+        let mut hash = vec![];
         let mut block = Default::default();
         let start = Utc::now();
         while !is_hash_valid(&hash, target_hash_zero_count) {  // TODO concurrent calculation
@@ -254,18 +254,19 @@ impl Miner {
                 timestamp,
                 nonce,
                 signature: signature.clone(),
-                hash: hash.clone(),
+                hash: vec![],
                 previous_block_hash: previous_block_hash.clone(),
                 transactions: transactions.clone()
             };
-            hasher.update(format!("{:?}", block).as_bytes());
+            let hash_data = bincode::serialize(&block).unwrap();
+            hasher.update(hash_data.as_slice());
             let h = hasher.finalize();
             hash.clear();
             hash.extend_from_slice(&h);
             nonce += 1;
         };
         let finish = Utc::now();
-        info!("success!!!, total time = {} sec", finish.second() - start.second());
+        info!("valid block hash has been found, total time = {} sec", finish.second() - start.second());
         info!("hash: {}, nonce: {}", print_bytes(&hash), &nonce);
         block.nonce = nonce;
         block.hash = hash;
@@ -291,10 +292,20 @@ impl Connect for Miner {
     }
 }
 
+// fn hash_data(transactions: &Vec<Transaction>) -> Vec<u8> {
+//     Vec::from(transactions.iter()
+//         .map(|t| t.to_string())
+//         .reduce(|acc, t| acc + " " + t.as_str())
+//         .unwrap()
+//         .as_bytes())
+//
+// }
+
 #[cfg(test)]
 mod tests {
-
+    use std::hash::Hash;
     use std::sync::Arc;
+    use blake2::Digest;
     use rand::prelude::*;
     use chrono::Utc;
     use crypto::hash;
@@ -305,50 +316,83 @@ mod tests {
     use crate::miner::{ Miner};
     use crate::storage::Storage;
     use tokio::sync::{Mutex};
-    use crate::connector::{Connect, Connector};
+    use tracing::info;
 
-    // #[tokio::test]
-    // async fn mine_block_succeed() {
-    //     let mut miner = Miner::new(1);
-    //     miner.run().await;
-    //     let previous_block_transactions = vec![generate_transaction()];
-    //     let previous_block = generate_block(2, previous_block_transactions);
-    //     let current_block_transactions = vec![generate_transaction()];
-    //     let private_key = miner.private_key.clone();
-    //     let block = Miner::mine_block(
-    //         private_key,
-    //         2,
-    //         Some(previous_block.hash),
-    //         Some(previous_block.id),
-    //         current_block_transactions);
-    //     assert!(&block.hash.starts_with(&[0, 0]))
-    // }
-    //
-    // #[tokio::test]
-    // async fn receive_transactions_and_start_mine_block_succeed() {
-    //     let miner = Arc::new(Mutex::new(Miner::new(1)));
-    //     let miner1 = miner.clone();
-    //     let miner3 = miner.clone();
-    //     let previous_block_transactions = vec![generate_transaction(), generate_transaction()];
-    //     let previous_block = generate_block(2, previous_block_transactions);
-    //     tokio::spawn(async move {
-    //         let mut miner2 = miner1.lock().await;
-    //         miner2.add_block_to_storage(previous_block).await;
-    //         let miner4 = miner.clone();
-    //         tokio::spawn(async move {
-    //             let mut miner4 = miner4.lock().await;
-    //             miner4.run().await; }
-    //         );
-    //     });
-    //     tokio::spawn(async move {
-    //         for _ in 0..10 {
-    //             let mut miner3 = miner3.lock().await;
-    //             //miner3.add_transaction_to_pool(generate_transaction());
-    //         }
-    //     })
-    //         .await
-    //         .expect("Could not add transactions to transaction pool");
-    // }
+    #[test]
+    fn validate_block_hash() {
+        // for _ in 0..10 {
+        //     let block = generate_block(
+        //         11134,
+        //         vec![
+        //             generate_transaction(),
+        //             generate_transaction(),
+        //             generate_transaction()
+        //         ]);
+        //     let block_hash = hash(block.to_string().as_bytes());
+        //     info!("block hash is {}", print_bytes(&block_hash));
+        // }
+
+        let block = generate_block(
+                11134,
+                vec![
+                    generate_transaction(),
+                    generate_transaction(),
+                    generate_transaction()
+                ]);
+        let block_hash1 = hash(block.to_string().as_bytes());
+        info!("block hash1 is {}", print_bytes(&block_hash1));
+        let block_hash2 = hash(block.to_string().as_bytes());
+        info!("block hash2 is {}", print_bytes(&block_hash2));
+
+        // let mut block_to_check = block.clone();
+        // block_to_check.hash = vec![];
+        // let hash = hash(block_to_check.to_string().as_bytes());
+        //hash == block.hash
+        //assert_eq!(&block_hash, &block.hash)
+    }
+
+    #[tokio::test]
+    async fn mine_block_succeed() {
+        let miner = Miner::new(1);
+        miner.run().await;
+        let previous_block_transactions = vec![generate_transaction()];
+        let previous_block = generate_block(2, previous_block_transactions);
+        let current_block_transactions = vec![generate_transaction()];
+        let private_key = miner.private_key.clone();
+        let block = Miner::mine_block(
+            private_key,
+            2,
+            Some(previous_block.hash),
+            Some(previous_block.id),
+            current_block_transactions);
+        assert!(&block.hash.starts_with(&[0, 0]))
+    }
+
+    #[tokio::test]
+    async fn receive_transactions_and_start_mine_block_succeed() {
+        let miner = Arc::new(Mutex::new(Miner::new(1)));
+        let miner1 = miner.clone();
+        let miner3 = miner.clone();
+        let previous_block_transactions = vec![generate_transaction(), generate_transaction()];
+        let previous_block = generate_block(2, previous_block_transactions);
+        tokio::spawn(async move {
+            let mut miner2 = miner1.lock().await;
+            miner2.add_block_to_storage(previous_block).await;
+            let miner4 = miner.clone();
+            tokio::spawn(async move {
+                let miner4 = miner4.lock().await;
+                miner4.run().await; }
+            );
+        });
+        tokio::spawn(async move {
+            for _ in 0..10 {
+                let mut miner3 = miner3.lock().await;
+                //miner3.add_transaction_to_pool(generate_transaction());
+            }
+        })
+            .await
+            .expect("Could not add transactions to transaction pool");
+    }
 
     fn generate_block(nonce: u32, transactions: Vec<Transaction>) -> Block {
         let (_, private_key) = Ed25519Sha512::new().keypair(None).unwrap();
@@ -366,7 +410,8 @@ mod tests {
             previous_block_hash: Some(String::from("0004f4544324323323").as_bytes().to_vec()),
             transactions,
         };
-        let hash = hash(&block.to_string().as_bytes());
+        let hash_data = bincode::serialize::<Block>(&block).unwrap();
+        let hash = hash(hash_data.as_slice());
         println!("block hash : {}", print_bytes(&hash));
         block.hash = hash;
         block

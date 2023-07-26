@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::net::{TcpStream};
 use tracing::error;
-use network::{ send_data, read_exact_async, serialize_data, SendEvent};
+use network::{ send_data, SendEvent};
 
 
 pub struct Client {

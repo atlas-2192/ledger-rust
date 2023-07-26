@@ -1,4 +1,7 @@
 #![feature(async_closure)]
+#![feature(slice_pattern)]
+extern crate core;
+
 mod storage;
 mod sender;
 mod receiver;
