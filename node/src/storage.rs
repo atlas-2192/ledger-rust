@@ -1,7 +1,4 @@
-use core::slice::SlicePattern;
-use blake2::Digest;
 use tracing::error;
-use ursa::keys::PublicKey;
 use state::{Accounts, Assets, Block, MAX_TRANSACTIONS_IN_BLOCK};
 use network::{Data};
 
@@ -31,11 +28,11 @@ impl Storage {
     }
 
     pub fn try_add_block(&mut self, block: Block) -> Result<(), LedgerError> {
-        let blockchain_len = self.blockchain.len();
-        let previous_block = self.blockchain.get(blockchain_len);
-        if let Some(previous_block) = previous_block {
+        let previous_block = self.blockchain.last();
+        if previous_block.is_some() && &block.id != &0u64 {
+            let previous_block = previous_block.unwrap();
             if Self::validate_block(self, &block, previous_block) {
-                // TODO      persistence <--> state in memory???
+                // TODO      persistence < --- > state in memory???
                 for commands in block.transactions.iter().map(|transaction| &transaction.commands) {
                     for command in commands {
                         command.execute(&mut self.accounts, &mut self.assets);
@@ -44,11 +41,11 @@ impl Storage {
                 self.blockchain.push(block);
                 return Ok(())
             } else {
-                return Err(LedgerError::BlockError)
+                Err(LedgerError::BlockError)
             }
         } else {
             Self::try_add_genesis_block(self, block)?;
-            return Ok(())
+            Ok(())
         }
     }
 
@@ -81,10 +78,10 @@ impl Storage {
     }
 
     fn validate_block(&self, block: &Block, previous_block: &Block) -> bool {
-        if block.id != previous_block.id - 1 {
-            error!("invalid block id: {}", &block.id);
-            return false
-        }
+        // if block.id != previous_block.id + 1 {
+        //     error!("invalid block id: {}", &block.id);
+        //     return false
+        // }
         if &previous_block.hash != block.previous_block_hash.as_ref().unwrap() {
             error!("invalid previous block hash: {}", print_bytes(&previous_block.hash));
             return false
@@ -103,11 +100,7 @@ impl Storage {
             error!("invalid block hash: {}", print_bytes(&block.hash));
             return false
         }
-        // TODO check signature ?
-        // if !Self::validate_signature(&block.signature) {
-        //     println!("invalid block signature: {}", print_bytes(&block.signature));
-        //     return false
-        // }
+
         true
     }
 
@@ -120,10 +113,6 @@ impl Storage {
         block_to_validate.hash.extend_from_slice(&h);
         block_to_validate.hash == block.hash
     }
-
-    // fn validate_signature(signature: &Vec<u8>, public_key: &PublicKey) -> bool {
-    //     true
-    // }
 
     fn validate_chain(&self, remote_block_chain: Vec<Block>) -> bool {
         for (i, _) in remote_block_chain.iter().enumerate() {

@@ -21,7 +21,7 @@ use state::{Block, Transaction};
 use utils::print_bytes;
 use async_trait::async_trait;
 use blake2::Digest;
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use crate::connector::{Connect, Connector};
 use crate::storage::Storage;
 
@@ -93,7 +93,8 @@ impl Miner {
                 match data {
                     // receive block from other node
                     Data::Block(block) => {
-                        info!("received block from other node: {}", &block);
+                        debug!("miner id: {}", id);
+                        info!("block has been received from another node: {}", &block);
                         let storage = storage.clone();
                         let mut storage = storage.lock().await;
                         let added_block = storage.try_add_block(block);
@@ -139,6 +140,9 @@ impl Miner {
             let storage = storage.clone();
             let mut storage = storage.lock().await;
             let previous_block = storage.get_blockchain_by_ref().last();
+            // if let Some(b) = previous_block.as_ref() {
+            //     debug!("previous_block: {}", &b);
+            // }
             let previous_block_id;
             let previous_block_hash;
             match previous_block {
@@ -147,7 +151,9 @@ impl Miner {
                     previous_block_hash = None;
                 },
                 Some(p_b) => {
+                    debug!("miner_id: {}, previous_block id: {}", id, &p_b.id);
                     previous_block_id = Some(p_b.id);
+                    debug!("miner_id: {}, previous_block hash: {}", id, print_bytes(&p_b.hash));
                     previous_block_hash = Some(p_b.hash.clone());
                 }
             };
@@ -173,7 +179,6 @@ impl Miner {
                             }
                             info!("10 transactions are ready to mine");
                             return ready_transactions
-
                         }
                         Err(_) => {
                             //warn!("miner_id: {}, run_mining() Transaction pool locked", &id);
@@ -183,7 +188,8 @@ impl Miner {
                 }
             }
                 .await;
-            info!("10 transactions have been received from transaction pool");
+            debug!("10 transactions have been received from transaction pool");
+            debug!("mining block started, miner_id: {}", id);
             let block = tokio::task::spawn_blocking(move || {
                 Self::mine_block(
                     private_key,
@@ -194,10 +200,11 @@ impl Miner {
             })
                 .await
                 .unwrap();
-            info!("block has been successfully mined");
+            info!("miner_id: {}, block has been mined, block: \n {}", id, &block);
             let added_block = storage.try_add_block(block.clone());
             if added_block.is_err() {
-                trace!("failed to add self-mined block");
+                let err = added_block.err().unwrap();
+                error!("miner_id: {id}, failed to add self-mined block: {}", err)
             } else {
                 let connector_tx = connector_tx.clone();
                 let mut connector_tx = connector_tx.lock().await;
@@ -207,7 +214,7 @@ impl Miner {
                 if sent_block.is_err() {
                     error!("error while sending block to connector: {}", sent_block.err().unwrap())
                 } else {
-                    trace!("block sent to connector");
+                    trace!("block sent to connector, miner_id: {}", id);
                 }
             }
         }
@@ -266,7 +273,7 @@ impl Miner {
             nonce += 1;
         };
         let finish = Utc::now();
-        info!("valid block hash has been found, total time = {} sec", finish.second() - start.second());
+        //info!("valid block hash has been found, total time = {} sec", finish.second() - start.second());
         info!("hash: {}, nonce: {}", print_bytes(&hash), &nonce);
         block.nonce = nonce;
         block.hash = hash;

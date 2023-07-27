@@ -19,7 +19,7 @@ impl Client {
         todo!()
     }
 
-    pub async fn send_transaction_to_network(&self, transaction: Vec<u8>) {
+    pub async fn send_transaction_to_network(&mut self, transaction: Vec<u8>) {
         let mut addresses = Vec::new();
         self.peers.values().for_each(|addr| addresses.push(addr.clone()));
         for (_, addr) in addresses.iter().enumerate() {
@@ -30,9 +30,9 @@ impl Client {
             // }
             let a = tokio::spawn(async move {
                 let stream = TcpStream::connect(addr.clone()).await;
-                if let Ok(stream) = stream {
+                if let Ok(mut stream) = stream {
                     let res = send_data(
-                        &stream,
+                        &mut stream,
                         transaction_clone.as_slice(),
                         SendEvent::SendTransaction)
                         .await;
@@ -68,7 +68,7 @@ mod tests {
     #[tokio::test]
     async fn send_transaction_would_return_success() {
         let transaction = create_account_transaction();
-        let client = Client::new();
+        let mut client = Client::new();
         client.send_transaction_to_network(serialize_data(&transaction)).await;
     }
 

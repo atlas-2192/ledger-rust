@@ -1,5 +1,6 @@
 #![feature(async_closure)]
 #![feature(slice_pattern)]
+#![feature(let_chains)]
 extern crate core;
 
 mod storage;
@@ -46,9 +47,9 @@ mod tests {
     #[tokio::test]
     async fn start_blockchain_and_send_transactions() {
 
-        let client1 = Client::new();
-        let client2 = Client::new();
-        let client3 = Client::new();
+        let mut client1 = Client::new();
+        let mut client2 = Client::new();
+        let mut client3 = Client::new();
 
         let mut transactions1 = Vec::with_capacity(10);
         for _ in 0..transactions1.capacity() {

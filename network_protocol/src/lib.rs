@@ -9,6 +9,7 @@ use std::convert::{TryFrom};
 use std::fmt::{Display, Formatter};
 use derive_more::{Display};
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncWriteExt;
 use tracing::{error, trace};
 use errors::LedgerError;
 use errors::LedgerError::CommandError;
@@ -146,10 +147,10 @@ pub async fn write_all_async(stream: &TcpStream, buf: &[u8]) -> io::Result<()> {
 
 /// 1 byte - event, 2 byte - len of data, 3..len bytes - data
 pub async fn send_data<DATA: AsRef<[u8]>>(
-    socket: &TcpStream,
+    socket: &mut TcpStream,
     data: DATA,
     event: SendEvent)
-    -> Result< (), io::Error>
+    -> Result< (), Error>
 {
     let buf = data.as_ref();
     match event {
@@ -161,18 +162,22 @@ pub async fn send_data<DATA: AsRef<[u8]>>(
 async fn send_command_and_data(
     send_event: SendEvent,
     buf: &[u8],
-    socket: &TcpStream)
-    -> Result<(), io::Error>
+    socket: &mut TcpStream)
+    -> Result<(), Error>
 {
     let cmd_buf: [u8; 1] = [send_event.value()];
     write_all_async(socket, &cmd_buf).await?;
     let buf_len = (buf.len() as u32).to_be_bytes();
     write_all_async(socket, &buf_len).await?;
     write_all_async(socket, buf).await?;
+    let flushed = socket.flush().await;
+    if flushed.is_err() {
+        error!("SOCKET ERROR: {}", flushed.err().unwrap())
+    }
     let mut buf: [u8; 1] = [0u8];
     read_exact_async(socket, &mut buf).await?;
     if buf[0] == 1 {
-        error!("SendBlock success");
+        trace!("SendBlock success");
         return Ok(())
     } else {
         error!("SendBlock failure");
@@ -184,19 +189,23 @@ async fn send_command_and_data(
 pub async fn receive_data(socket: &TcpStream) -> Result<Data, LedgerError>
 {
     let mut cmd_buf: [u8; 1] = [0u8];
-    if read_exact_async(socket, &mut cmd_buf).await.is_err() {
-        return Err(LedgerError::NetworkError)
-    }
-    let event = ReceiveEvent::from_value(cmd_buf[0]);
-    if event.is_err() {
-        return Err(CommandError)
-    }
-    let event = event.unwrap();
-    match event {
-        _ => {
-            let block = receive_event_and_data(event, socket).await?;
-            Ok(block)
+    let read = read_exact_async(socket, &mut cmd_buf).await;
+    if let Ok(_) = read {
+        let event = ReceiveEvent::from_value(cmd_buf[0]);
+        if event.is_err() {
+            return Err(CommandError)
         }
+        let event = event.unwrap();
+        return match event {
+            _ => {
+                let data = receive_event_and_data(event, socket).await?;
+                Ok(data)
+            }
+        }
+    } else {
+        let err = read.err().unwrap();
+        error!("receive_data() error : {}", err);
+        return Err(LedgerError::NetworkError)
     }
 }
 
@@ -206,22 +215,26 @@ async fn receive_event_and_data(
     -> Result<Data, LedgerError>
 {
     let mut len_buf = DATA_LEN.clone();
-    if read_exact_async(socket, &mut len_buf).await.is_err() {
+    if let Err(e) = read_exact_async(socket, &mut len_buf).await {
+        error!("receive_event_and_data() len_buf error: {}", e);
         return Err(LedgerError::NetworkError);
-    };
+    }
     let len = u32::from_be_bytes(len_buf);
     let mut data_buf = vec![0; len as _];
-    if read_exact_async(socket, &mut data_buf).await.is_err() {
+    if let Err(e) = read_exact_async(socket, &mut data_buf).await {
+        error!("receive_event_and_data() data_buf error: {}", e);
         return Err(LedgerError::NetworkError);
-    };
+    }
     let data;
     match event {
         ReceiveEvent::ReceiveBlock => {
             let block = deserialize_data(data_buf.as_slice());
             if block.is_ok() {
                 data = Data::Block(block.unwrap());
-                //println!("block has been received...");
+                //trace!("block has been received from another node");
             } else {
+                let err = block.err().unwrap();
+                error!("receive_event_and_data() deserialize_data error: {}", err);
                 return Err(LedgerError::NetworkError);
             }
         }
@@ -283,16 +296,16 @@ pub enum Data {
 impl Display for Data {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Data::Block(b) => {
+            Data::Block(ref b) => {
                 write!(f, "data (block) : {}", b)
             }
-            Data::Transaction(t) => {
+            Data::Transaction(ref t) => {
                 write!(f, "data (transaction) : {}", t)
             }
-            Data::Peer(p) => {
+            Data::Peer(ref p) => {
                 write!(f, "data (node) : {}", p)
             }
-            Data::Peers(p) => {
+            Data::Peers(ref p) => {
                 write!(f, "data (peers) : {}",
                        p.iter()
                            .map(|p| p.0.clone() + " " + p.1.as_str())
@@ -323,12 +336,14 @@ pub fn serialize_data<'a, DATA: serde::ser::Serialize>(data: DATA) -> Vec<u8> {
 
 pub fn deserialize_data<'a, DATA: serde::de::Deserialize<'a>>(bytes:  &'a [u8])
     -> Result<DATA, LedgerError> {
-    if let Ok(data) = DefaultOptions::new()
+    let data = DefaultOptions::new()
         .with_varint_encoding()
-        .deserialize::<DATA>(&bytes[..]) {
+        .deserialize::<DATA>(&bytes[..]);
+    if let Ok(data) = data {
         Ok(data)
     } else {
-        Err(LedgerError::NetworkError)
+        error!("network::deserialize_data() error: {}", data.err().unwrap() );
+        Err(LedgerError::DeserializeError)
     }
 }
 
@@ -343,8 +358,8 @@ mod tests {
     #[tokio::test]
     async fn transfer_block() {
         let block = generate_block();
-        let sender = TcpStream::connect("127.0.0.1:1234").await.unwrap();
-        send_data(&sender, serialize_data::<&Block>(&block).as_slice(), SendBlock).await;
+        let mut sender = TcpStream::connect("127.0.0.1:1234").await.unwrap();
+        send_data(&mut sender, serialize_data::<&Block>(&block).as_slice(), SendBlock).await;
     }
 
     async fn receiver(listener: TcpListener) -> TcpStream {

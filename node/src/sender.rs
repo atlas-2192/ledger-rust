@@ -13,18 +13,20 @@ use tokio::sync::mpsc::{
     Receiver as Rx,
     Sender as Tx
 };
-use tracing::error;
+use tracing::{error, trace};
 
 #[derive(Debug)]
 pub(crate) struct Sender {
+    peer_address: SocketAddr,
     peers: Peers,
     pub(crate) connector_rx: Option<tokio::sync::mpsc::Receiver<Data>>,
 }
 
 impl Sender {
 
-    pub fn new() -> Self {
+    pub fn new(peer_address: SocketAddr) -> Self {
         Self {
+            peer_address,
             peers: Peers::new(),
             connector_rx: None
         }
@@ -33,11 +35,13 @@ impl Sender {
     pub async fn run(&mut self) {
         loop {
             let peers = &self.peers;
+            let address = &self.peer_address;
             if let Some(connector_rx) = self.connector_rx.as_mut() {
                 while let Some(data) = connector_rx.recv().await {
                     match data {
                         Data::Block(block) => {
-                            Self::send_block_to_network(peers, block).await;
+                            trace!("get block from connector: {}", &block);
+                            Self::send_block_to_network(address, peers, block).await;
                         }
                         Data::Transaction(_) => {
                             error!("error: transaction is not intended to be sent by peer")
@@ -50,23 +54,25 @@ impl Sender {
         }
     }
 
-    async fn send_block_to_network(peers: &Peers, block: Block) {
+    async fn send_block_to_network(peer_address: &SocketAddr, peers: &Peers, block: Block) {
         for (_, socket_addr) in peers.addresses.iter() {
+            if socket_addr.eq(peer_address) {
+                continue
+            }
             let block = block.clone();
             let socket = TcpStream::connect(socket_addr).await;
-            if let Ok(socket) = socket {
+            if let Ok(mut socket) = socket {
                 tokio::spawn(async move {
-                    let data = Data::Block(block);
                     let res = network::send_data(
-                        &socket,
-                        serialize_data(&data), SendEvent::SendBlock)
+                        &mut socket,
+                        serialize_data(&block), SendEvent::SendBlock)
                         .await;
                     if res.is_err() {
-                        println!("error while sending block to peer: {}", res.err().unwrap());
+                        error!("error while sending block to peer: {}", res.err().unwrap());
                     }
                 });
             } else {
-                println!("could not establish connection: {}", socket_addr)
+                error!("could not establish connection: {}", socket_addr)
             }
         }
     }

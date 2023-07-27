@@ -7,7 +7,7 @@ use tokio::sync::mpsc::{
     Sender as Tx
 };
 use async_trait::async_trait;
-use tracing::{error, info, trace};
+use tracing::{error, info, span, trace, Level};
 use crate::sender::Sender;
 
 /// structure for connecting modules together
@@ -62,7 +62,7 @@ impl Connector {
                     while let Some(data) = miner_rx.recv().await {
                         match data.data_type() {
                             1 => {
-                                info!("get block from miner: {}", &data);
+                                trace!("get block from miner: {}", &data);
                                 let sender_tx = sender_tx.clone();
                                 Self::send_data(sender_tx, data).await;
                             }
@@ -150,7 +150,7 @@ mod tests {
 
     async fn send_transaction_to_receiver() {
         let transaction = create_account_transaction();
-        let client = Client::new();
+        let mut client = Client::new();
         client.send_transaction_to_network(serialize_data(&transaction)).await;
     }
 

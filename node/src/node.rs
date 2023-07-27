@@ -24,7 +24,7 @@ impl Node {
     pub async fn start(local_port: &str) {
         let address = SocketAddr::from_str((String::from(LOCAL_HOST) + local_port).as_str()).unwrap();
         let receiver = Arc::new(Mutex::new(Receiver::new(address).await));
-        let sender = Arc::new(Mutex::new(Sender::new()));
+        let sender = Arc::new(Mutex::new(Sender::new(address)));
         let miner = Arc::new(Mutex::new(Miner::new(local_port.parse().unwrap()))); // TODO FIX
 
         let receiver1 = receiver.clone();

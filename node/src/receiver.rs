@@ -46,6 +46,7 @@ impl Receiver {
     async fn process_incoming(&mut self, socket: &mut TcpStream)
         -> Result<(), LedgerError>
     {
+        //trace!("process_incoming on peer: {}, remote socket: {}", &self.address, &socket.peer_addr().unwrap());
         let data = receive_data(socket).await;
         if data.is_ok() {
             let tx = self.connector_tx.as_ref().unwrap();
