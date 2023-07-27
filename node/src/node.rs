@@ -3,10 +3,15 @@ use std::str::FromStr;
 use std::sync::{Arc, MutexGuard};
 //use std::sync::Mutex;
 use std::thread;
+use std::time::Duration;
+use bincode::serialize;
 
 use queues::{Queue, queue};
-use tokio::sync::Mutex;
-use tracing::{event, Level, span};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+use tokio::sync::{Mutex, TryLockError};
+use tracing::{debug, event, info, Level, span};
+use tracing::field::debug;
 
 use network::Data;
 
@@ -14,18 +19,34 @@ use crate::connector::{Connect, Connector};
 use crate::miner::Miner;
 use crate::receiver::Receiver;
 use crate::sender::Sender;
+use crate::storage::Storage;
 
 const LOCAL_HOST: &str = "127.0.0.1:";
 
-pub struct Node {}
+pub struct Node {
+    peer_address: SocketAddr,
+    receiver: Arc<Mutex<Receiver>>,
+    sender: Arc<Mutex<Sender>>,
+    miner: Arc<Mutex<Miner>>,
+}
 
 impl Node {
 
-    pub async fn start(local_port: &str) {
-        let address = SocketAddr::from_str((String::from(LOCAL_HOST) + local_port).as_str()).unwrap();
-        let receiver = Arc::new(Mutex::new(Receiver::new(address).await));
-        let sender = Arc::new(Mutex::new(Sender::new(address)));
-        let miner = Arc::new(Mutex::new(Miner::new(local_port.parse().unwrap()))); // TODO FIX
+    pub async fn new(local_port: &str) -> Self {
+        let addr = SocketAddr::from_str((String::from(LOCAL_HOST) + local_port).as_str()).unwrap();
+        Self {
+            peer_address: addr,
+            receiver: Arc::new(Mutex::new(Receiver::new(addr).await)),
+            sender: Arc::new(Mutex::new(Sender::new(addr))),
+            miner: Arc::new(Mutex::new(Miner::new(local_port.parse().unwrap()))),
+        }
+    }
+
+    pub async fn start(&self) {
+        let port = self.peer_address.port();
+        let receiver = self.receiver.clone();
+        let sender = self.sender.clone();
+        let miner = self.miner.clone();
 
         let receiver1 = receiver.clone();
         let sender1 = sender.clone();
@@ -57,6 +78,45 @@ impl Node {
             miner.run().await;
         });
 
-        event!(Level::INFO, "node started on 127.0.0.1:{}", local_port);
+        event!(Level::INFO, "node started on 127.0.0.1:{}", port);
+
+        Self::listen_api_requests(self, port).await;
+    }
+
+    async fn listen_api_requests(&self, mut port: u16) {
+        port += 10;
+        let addr = String::from(LOCAL_HOST) + port.to_string().as_str();
+        let listener = TcpListener::bind(addr.as_str()).await.unwrap();
+        info!("listen_api_requests started on {}", &addr);
+        loop {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf: [u8; 1] = [0; 1];
+                socket.read(&mut buf).await.expect("could not read request command");
+                if buf[0] != 5 {
+                    let err_resp: [u8; 1] = [0; 1];
+                    socket.write(err_resp.as_slice()).await.expect("could not write error response");
+                    continue
+                }
+                let miner = self.miner.clone();
+                let miner = miner.lock().await;
+                let storage = miner.storage.clone();
+                loop {
+                    match storage.try_lock() {
+                        Ok(storage) => {
+                            let blockchain = storage.get_blockchain_by_ref();
+                            let buf = serialize(blockchain).unwrap();
+                            let len = socket.write(buf.as_slice()).await.unwrap();
+                            socket.flush().await.expect("could not flush buffer");
+                            debug!("{} bytes has written", len);
+                            break
+                        }
+                        Err(_) => {
+                            debug!("storage is locked yet");
+                            tokio::time::sleep(Duration::from_millis(300)).await
+                        }
+                    }
+                }
+            }
+        }
     }
 }

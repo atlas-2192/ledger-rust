@@ -46,8 +46,9 @@ impl Sender {
                         Data::Transaction(_) => {
                             error!("error: transaction is not intended to be sent by peer")
                         }
-                        Data::Peer(_) => { todo!() }
-                        Data::Peers(_) => { todo!() }
+                        Data::Peer(peer) => { todo!() }
+                        Data::Peers(peers) => { todo!() }
+                        Data::Blockchain(blocks) => { todo!() }
                     }
                 }
             }

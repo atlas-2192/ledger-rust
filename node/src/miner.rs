@@ -31,7 +31,7 @@ pub(crate) struct Miner {
     public_key: PublicKey,
     private_key: PrivateKey,
     transaction_pool: Arc<Mutex<BinaryHeap<Transaction>>>,
-    storage: Arc<Mutex<Storage>>,
+    pub(crate) storage: Arc<Mutex<Storage>>,
     pub(crate) connector_rx: Arc<Mutex<Option<Rx<Data>>>>,
     pub(crate) connector_tx: Arc<Mutex<Option<Tx<Data>>>>,
 }

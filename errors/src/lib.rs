@@ -19,5 +19,7 @@ pub enum LedgerError {
     SyncError,
     #[error("Persistence error")]
     PersistenceError,
+    #[error("API error")]
+    ApiError,
 }
 

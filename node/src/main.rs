@@ -18,12 +18,16 @@ use crate::node::Node;
 fn main() {
 
     tracing_subscriber::fmt::init();
-
     let runtime = tokio::runtime::Runtime::new().unwrap();
+
     runtime.block_on( async {
-        tokio::spawn(async { Node::start("1234").await });
-        tokio::spawn(async { Node::start("1235").await });
-        tokio::spawn(async { Node::start("1236").await });
+        let node1 = Node::new("1234").await;
+        let node2 = Node::new("1235").await;
+        let node3 = Node::new("1236").await;
+
+        tokio::spawn(async move { node1.start().await });
+        tokio::spawn(async move { node2.start().await });
+        tokio::spawn(async move { node3.start().await });
         loop {
             tokio::time::sleep(Duration::MAX).await;
         }
@@ -45,7 +49,7 @@ mod tests {
 
     /// Assuming that nodes has started during performing this test
     #[tokio::test]
-    async fn start_blockchain_and_send_transactions() {
+    async fn send_transactions_to_network() {
 
         let mut client1 = Client::new();
         let mut client2 = Client::new();

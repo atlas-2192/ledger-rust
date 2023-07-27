@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::net::{TcpStream};
-use tracing::error;
-use network::{ send_data, SendEvent};
+use tracing::{debug, error};
+use errors::LedgerError;
+use network::{deserialize_data, receive_data, send_data, SendEvent};
+use state::Block;
 
 
 pub struct Client {
@@ -47,6 +49,38 @@ impl Client {
             error!("{}", a.is_err());
         }
     }
+
+    pub async fn get_node_blockchain(addr: SocketAddr) -> Result<Vec<Block>, LedgerError> {
+        let stream = TcpStream::connect(addr).await;
+        if let Ok(mut stream) = stream {
+            let buf: [u8; 0] = [0; 0];
+            let request = send_data(
+                &mut stream,
+                buf.as_slice(),
+                SendEvent::SendChain)
+                .await;
+            let response;
+            let data = &[];
+            if let Ok(_) = request {
+                response = receive_data(&mut stream).await;
+                return if response.is_err() {
+                    error!("error receiving blockchain : {}", response.err().unwrap());
+                    Err(LedgerError::ApiError)
+                } else {
+                    if let Ok(deserialized_data) = deserialize_data::<Vec<Block>>(data) {
+                        Ok(deserialized_data)
+                    } else {
+                        error!("error deserializing response : {}", response.err().unwrap());
+                        Err(LedgerError::DeserializeError)
+                    }
+                }
+            }
+            unreachable!()
+        } else {
+            error!("could not connect to node");
+            return Err(LedgerError::NetworkError)
+        };
+    }
 }
 
 fn get_initial_peers() -> HashMap<u32, SocketAddr> {
@@ -59,10 +93,12 @@ fn get_initial_peers() -> HashMap<u32, SocketAddr> {
 
 #[cfg(test)]
 mod tests {
-
-    use tokio::net::{TcpStream};
+    use std::net::SocketAddr;
+    use std::str::FromStr;
+    use tracing::info;
     use network::{ serialize_data};
-    use state::{Block, Transaction};
+    use state::{Transaction};
+    use utils::LOCAL_HOST;
     use crate::Client;
 
     #[tokio::test]
@@ -71,6 +107,14 @@ mod tests {
         let mut client = Client::new();
         client.send_transaction_to_network(serialize_data(&transaction)).await;
     }
+
+    #[tokio::test]
+    async fn get_blockchain_state() {
+        let addr = SocketAddr::from_str((String::from(LOCAL_HOST) + "1244").as_str()).unwrap();
+        let blockchain = Client::get_node_blockchain(addr).await.unwrap();
+        blockchain.iter().for_each(|b| info!("block : {}", b));
+    }
+
 
     fn create_account_transaction() -> Transaction {
         Transaction {

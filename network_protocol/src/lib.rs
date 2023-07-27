@@ -34,6 +34,7 @@ pub enum SendEvent {
     SendTransaction = 2,
     InitPeer = 3,
     SendPeers = 4,
+    SendChain = 5,
     //SendProveBlock,
 }
 
@@ -43,7 +44,8 @@ impl SendEvent {
             SendEvent::SendBlock => 1,
             SendEvent::SendTransaction => 2,
             SendEvent::InitPeer => 3,
-            SendEvent::SendPeers => 4
+            SendEvent::SendPeers => 4,
+            SendEvent::SendChain => 5,
         }
     }
 }
@@ -54,6 +56,7 @@ pub enum ReceiveEvent {
     ReceiveTransaction = 2,
     AddPeer = 3,
     ReceivePeers = 4,
+    ReceiveChain = 5,
     //ReceiveProveBlock,
 }
 
@@ -64,6 +67,7 @@ impl ReceiveEvent {
             2 => Ok(ReceiveEvent::ReceiveTransaction),
             3 => Ok(ReceiveEvent::AddPeer),
             4 => Ok(ReceiveEvent::ReceivePeers),
+            5 => Ok(ReceiveEvent::ReceiveChain),
             _ => Err(CommandError)
         }
     }
@@ -81,6 +85,7 @@ impl TryFrom<(u8, u8)> for NetworkEvent {
                     2 => SendEvent::SendTransaction,
                     3 => SendEvent::InitPeer,
                     4 => SendEvent::SendPeers,
+                    5 => SendEvent::SendChain,
                     _ => {
                         println!("NetworkEvent ERROR");
                         return Err(CommandError)
@@ -96,6 +101,7 @@ impl TryFrom<(u8, u8)> for NetworkEvent {
                     2 => ReceiveEvent::ReceiveTransaction,
                     3 => ReceiveEvent::AddPeer,
                     4 => ReceiveEvent::ReceivePeers,
+                    5 => ReceiveEvent::ReceiveChain,
                     _ => {
                         println!("NetworkEvent ERROR");
                         return Err(CommandError)
@@ -167,21 +173,19 @@ async fn send_command_and_data(
 {
     let cmd_buf: [u8; 1] = [send_event.value()];
     write_all_async(socket, &cmd_buf).await?;
-    let buf_len = (buf.len() as u32).to_be_bytes();
-    write_all_async(socket, &buf_len).await?;
-    write_all_async(socket, buf).await?;
-    let flushed = socket.flush().await;
-    if flushed.is_err() {
-        error!("SOCKET ERROR: {}", flushed.err().unwrap())
+    if buf.len() > 0 {
+        let buf_len = (buf.len() as u32).to_be_bytes();
+        write_all_async(socket, &buf_len).await?;
+        write_all_async(socket, buf).await?;
     }
     let mut buf: [u8; 1] = [0u8];
     read_exact_async(socket, &mut buf).await?;
-    if buf[0] == 1 {
-        trace!("SendBlock success");
-        return Ok(())
+    return if buf[0] == 1 {
+        trace!("data sent successfully");
+        Ok(())
     } else {
-        error!("SendBlock failure");
-        return Err(Error::from(ErrorKind::NetworkDown))
+        error!("send data failure");
+        Err(Error::from(ErrorKind::NetworkDown))
     };
 }
 
@@ -265,6 +269,15 @@ async fn receive_event_and_data(
                 return Err(LedgerError::NetworkError);
             }
         }
+        ReceiveEvent::ReceiveChain => {
+            let blockchain = deserialize_data(data_buf.as_slice());
+            if blockchain.is_ok() {
+                data = Data::Blockchain(blockchain.unwrap());
+                //println!("peers have been received...");
+            } else {
+                return Err(LedgerError::NetworkError);
+            }
+        }
     }
     if write_response(socket).await == false {
         return Err(LedgerError::SyncError);
@@ -291,6 +304,7 @@ pub enum Data {
     Transaction(Transaction) = 2,
     Peer(String) = 3,
     Peers(HashMap<String, String>) = 4,
+    Blockchain(Vec<Block>) = 5,
 }
 
 impl Display for Data {
@@ -312,6 +326,13 @@ impl Display for Data {
                            .reduce(|acc, s| acc + ", " + s.as_str())
                            .unwrap())
             }
+            Data::Blockchain(ref b) => {
+                write!(f, "data (blockchain) : {}",
+                       b.iter()
+                           .map(Block::to_string)
+                           .reduce(|acc, s| acc + ", " + s.as_str())
+                           .unwrap())
+            }
         }
     }
 }
@@ -323,7 +344,8 @@ impl Data {
             Data::Block(_) => 1,
             Data::Transaction(_) => 2,
             Data::Peer(_) => 3,
-            Data::Peers(_) => 4
+            Data::Peers(_) => 4,
+            Data::Blockchain(_) => 5
         }
     }
 }
@@ -352,7 +374,7 @@ mod tests {
 
     use tokio::net::{TcpListener, TcpStream};
     use state::{Block, Command, Transaction};
-    use crate::{send_data, serialize_data, receive_data, SendEvent};
+    use crate::{send_data, serialize_data, SendEvent};
     use crate::SendEvent::SendBlock;
 
     #[tokio::test]

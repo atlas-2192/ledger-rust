@@ -15,3 +15,5 @@ tracing = "0.1.37"
 state = { path = "../state" }
 network = { path = "../network_protocol" }
 crypto = { path = "../crypto"}
+errors = { path = "../errors"}
+utils = { path = "../utils"}
