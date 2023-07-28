@@ -64,7 +64,7 @@ impl Sender {
             let socket = TcpStream::connect(socket_addr).await;
             if let Ok(mut socket) = socket {
                 tokio::spawn(async move {
-                    let res = network::send_data(
+                    let res = network::send_request(
                         &mut socket,
                         serialize_data(&block), SendEvent::SendBlock)
                         .await;

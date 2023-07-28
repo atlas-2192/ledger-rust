@@ -94,7 +94,8 @@ impl Miner {
                     // receive block from other node
                     Data::Block(block) => {
                         debug!("miner id: {}", id);
-                        info!("block has been received from another node: {}", &block);
+                        info!("block has been received from another node, \
+                        block id: {}, block hash: {}", &block.id, &block.hash,);
                         let storage = storage.clone();
                         let mut storage = storage.lock().await;
                         let added_block = storage.try_add_block(block);
@@ -104,23 +105,19 @@ impl Miner {
                     }
                     // receive transaction from client
                     Data::Transaction(transaction) => {
-                        //info!("miner_id: {}, received transaction: {}", &id, &transaction);
                         let mut transactions;
                         loop {
                             match transaction_pool.try_lock() {
                                 Ok(mutex_guard) => {
-                                    //info!("miner_id: {}, run_listening(), Transaction pool lock acquired", &id);
                                     transactions = mutex_guard;
                                     break;
                                 }
                                 Err(_) => {
-                                    //warn!("miner_id: {}, run_listening(), Transaction pool locked", &id);
                                     tokio::time::sleep(Duration::from_secs(3)).await;
                                 }
                             }
                         }
                         transactions.push(transaction);
-                        //info!("transaction added to pool");
                     }
                     _ => { error!("received wrong data type") }
                 }
@@ -138,8 +135,8 @@ impl Miner {
         // mine block from received transactions
         loop {
             let storage = storage.clone();
-            let mut storage = storage.lock().await;
-            let previous_block = storage.get_blockchain_by_ref().last();
+            let mut storage_lock = storage.lock().await;
+            let previous_block = storage_lock.get_blockchain_by_ref().last();
             // if let Some(b) = previous_block.as_ref() {
             //     debug!("previous_block: {}", &b);
             // }
@@ -157,6 +154,7 @@ impl Miner {
                     previous_block_hash = Some(p_b.hash.clone());
                 }
             };
+            drop(storage_lock);
             let private_key = private_key.clone();
             let transaction_pool = transaction_pool.clone();
             let ready_to_mine = async move {
@@ -164,12 +162,10 @@ impl Miner {
                 loop {
                     match transaction_pool.try_lock() {
                         Ok(mutex_guard) => {
-                            //info!("miner_id: {}, run_mining() Transaction pool lock acquired", &id);
                             transactions = mutex_guard;
                             if transactions.len() < 10 {
                                 drop(transactions);
-                                //info!("miner_id: {}, run_mining() Transaction pool lock released", &id);
-                                tokio::time::sleep(Duration::from_secs(10)).await;
+                                tokio::time::sleep(Duration::from_secs(5)).await;
                                 continue
                             };
                             let mut ready_transactions = Vec::with_capacity(10);
@@ -177,18 +173,17 @@ impl Miner {
                                 let transaction = transactions.pop().unwrap();
                                 ready_transactions.push(transaction);
                             }
-                            info!("10 transactions are ready to mine");
+                            //info!("10 transactions are ready to mine");
                             return ready_transactions
                         }
                         Err(_) => {
-                            //warn!("miner_id: {}, run_mining() Transaction pool locked", &id);
-                            tokio::time::sleep(Duration::from_secs(5)).await;
+                            tokio::time::sleep(Duration::from_secs(2)).await;
                         }
                     }
                 }
             }
                 .await;
-            debug!("10 transactions have been received from transaction pool");
+            //debug!("10 transactions have been received from transaction pool");
             debug!("mining block started, miner_id: {}", id);
             let block = tokio::task::spawn_blocking(move || {
                 Self::mine_block(
@@ -201,7 +196,9 @@ impl Miner {
                 .await
                 .unwrap();
             info!("miner_id: {}, block has been mined, block: \n {}", id, &block);
+            let mut storage = storage.lock().await;
             let added_block = storage.try_add_block(block.clone());
+            drop(storage);
             if added_block.is_err() {
                 let err = added_block.err().unwrap();
                 error!("miner_id: {id}, failed to add self-mined block: {}", err)
@@ -214,7 +211,7 @@ impl Miner {
                 if sent_block.is_err() {
                     error!("error while sending block to connector: {}", sent_block.err().unwrap())
                 } else {
-                    trace!("block sent to connector, miner_id: {}", id);
+                    //trace!("block sent to connector, miner_id: {}", id);
                 }
             }
         }

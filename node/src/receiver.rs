@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{
 use async_trait::async_trait;
 use tracing::{error, trace};
 use errors::LedgerError;
-use network::{receive_data, Data};
+use network::{process_incoming_data, Data};
 use crate::connector::{Connect, Connector};
 
 
@@ -47,7 +47,7 @@ impl Receiver {
         -> Result<(), LedgerError>
     {
         //trace!("process_incoming on peer: {}, remote socket: {}", &self.address, &socket.peer_addr().unwrap());
-        let data = receive_data(socket).await;
+        let data = process_incoming_data(socket).await;
         if data.is_ok() {
             let tx = self.connector_tx.as_ref().unwrap();
             let sent = tx.send(data.unwrap()).await;

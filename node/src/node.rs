@@ -90,13 +90,7 @@ impl Node {
         info!("listen_api_requests started on {}", &addr);
         loop {
             if let Ok((mut socket, _)) = listener.accept().await {
-                let mut buf: [u8; 1] = [0; 1];
-                socket.read(&mut buf).await.expect("could not read request command");
-                if buf[0] != 5 {
-                    let err_resp: [u8; 1] = [0; 1];
-                    socket.write(err_resp.as_slice()).await.expect("could not write error response");
-                    continue
-                }
+
                 let miner = self.miner.clone();
                 let miner = miner.lock().await;
                 let storage = miner.storage.clone();
@@ -106,8 +100,8 @@ impl Node {
                             let blockchain = storage.get_blockchain_by_ref();
                             let buf = serialize(blockchain).unwrap();
                             let len = socket.write(buf.as_slice()).await.unwrap();
-                            socket.flush().await.expect("could not flush buffer");
                             debug!("{} bytes has written", len);
+                            socket.flush().await.expect("could not flush buffer");
                             break
                         }
                         Err(_) => {
@@ -120,3 +114,14 @@ impl Node {
         }
     }
 }
+
+//                 let mut buf: [u8; 1] = [0; 1];
+//                 socket.read(&mut buf).await.expect("could not read request command");
+//                 if buf[0] != 5 {
+//                     let err_resp: [u8; 1] = [0; 1];
+//                     socket.write(err_resp.as_slice()).await.expect("could not write error response");
+//                     continue
+//                 } else {
+//                     let resp = [1u8];
+//                     socket.write(resp.as_slice()).await.expect("could not write response");
+//                 }

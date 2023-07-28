@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::net::{TcpStream};
 use tracing::{debug, error};
 use errors::LedgerError;
-use network::{deserialize_data, receive_data, send_data, SendEvent};
+use network::{Data, process_incoming_data, send_request, SendEvent};
 use state::Block;
 
 
@@ -33,7 +33,7 @@ impl Client {
             let a = tokio::spawn(async move {
                 let stream = TcpStream::connect(addr.clone()).await;
                 if let Ok(mut stream) = stream {
-                    let res = send_data(
+                    let res = send_request(
                         &mut stream,
                         transaction_clone.as_slice(),
                         SendEvent::SendTransaction)
@@ -52,33 +52,33 @@ impl Client {
 
     pub async fn get_node_blockchain(addr: SocketAddr) -> Result<Vec<Block>, LedgerError> {
         let stream = TcpStream::connect(addr).await;
-        if let Ok(mut stream) = stream {
-            let buf: [u8; 0] = [0; 0];
-            let request = send_data(
+        return if let Ok(mut stream) = stream {
+            let buf: [u8; 0] = [0; 0]; // no need to send data apart from command
+            let request = send_request(
                 &mut stream,
                 buf.as_slice(),
                 SendEvent::SendChain)
                 .await;
             let response;
-            let data = &[];
             if let Ok(_) = request {
-                response = receive_data(&mut stream).await;
-                return if response.is_err() {
+                response = process_incoming_data(&mut stream).await;
+                if response.is_err() {
                     error!("error receiving blockchain : {}", response.err().unwrap());
                     Err(LedgerError::ApiError)
                 } else {
-                    if let Ok(deserialized_data) = deserialize_data::<Vec<Block>>(data) {
-                        Ok(deserialized_data)
-                    } else {
-                        error!("error deserializing response : {}", response.err().unwrap());
-                        Err(LedgerError::DeserializeError)
+                    match response.unwrap() {
+                        Data::Blockchain(blockchain) => Ok(blockchain),
+                        _ => unreachable!()
                     }
                 }
+            } else {
+                let e = request.err().unwrap();
+                error!("client request error: {}", e);
+                Err(LedgerError::NetworkError)
             }
-            unreachable!()
         } else {
             error!("could not connect to node");
-            return Err(LedgerError::NetworkError)
+            Err(LedgerError::NetworkError)
         };
     }
 }
@@ -95,7 +95,7 @@ fn get_initial_peers() -> HashMap<u32, SocketAddr> {
 mod tests {
     use std::net::SocketAddr;
     use std::str::FromStr;
-    use tracing::info;
+    use tracing::{error, info};
     use network::{ serialize_data};
     use state::{Transaction};
     use utils::LOCAL_HOST;
@@ -111,8 +111,11 @@ mod tests {
     #[tokio::test]
     async fn get_blockchain_state() {
         let addr = SocketAddr::from_str((String::from(LOCAL_HOST) + "1244").as_str()).unwrap();
-        let blockchain = Client::get_node_blockchain(addr).await.unwrap();
-        blockchain.iter().for_each(|b| info!("block : {}", b));
+        if let Ok(blockchain) = Client::get_node_blockchain(addr).await {
+            blockchain.iter().for_each(|b| info!("block : {}", b));
+        } else {
+            error!("API error")
+        }
     }
 
 

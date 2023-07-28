@@ -62,7 +62,7 @@ impl Connector {
                     while let Some(data) = miner_rx.recv().await {
                         match data.data_type() {
                             1 => {
-                                trace!("get block from miner: {}", &data);
+                                //trace!("get block from miner: {}", &data);
                                 let sender_tx = sender_tx.clone();
                                 Self::send_data(sender_tx, data).await;
                             }

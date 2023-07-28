@@ -1,4 +1,4 @@
-use tracing::error;
+use tracing::{error, info};
 use state::{Accounts, Assets, Block, MAX_TRANSACTIONS_IN_BLOCK};
 use network::{Data};
 
@@ -39,6 +39,7 @@ impl Storage {
                     }
                 };
                 self.blockchain.push(block);
+                //info!("Block with id {} added to node {} blockchain", &block.id, self.)
                 return Ok(())
             } else {
                 Err(LedgerError::BlockError)
