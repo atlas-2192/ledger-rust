@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::net::{TcpStream};
 use tracing::{debug, error};
 use errors::LedgerError;
-use network::{Data, process_incoming_data, send_request, SendEvent};
+use network::{Data, p2p::process_incoming_data, p2p::send_data, p2p::SendEvent};
 use state::Block;
 
 
@@ -33,7 +33,7 @@ impl Client {
             let a = tokio::spawn(async move {
                 let stream = TcpStream::connect(addr.clone()).await;
                 if let Ok(mut stream) = stream {
-                    let res = send_request(
+                    let res = send_data(
                         &mut stream,
                         transaction_clone.as_slice(),
                         SendEvent::SendTransaction)
@@ -53,29 +53,7 @@ impl Client {
     pub async fn get_node_blockchain(addr: SocketAddr) -> Result<Vec<Block>, LedgerError> {
         let stream = TcpStream::connect(addr).await;
         return if let Ok(mut stream) = stream {
-            let buf: [u8; 0] = [0; 0]; // no need to send data apart from command
-            let request = send_request(
-                &mut stream,
-                buf.as_slice(),
-                SendEvent::SendChain)
-                .await;
-            let response;
-            if let Ok(_) = request {
-                response = process_incoming_data(&mut stream).await;
-                if response.is_err() {
-                    error!("error receiving blockchain : {}", response.err().unwrap());
-                    Err(LedgerError::ApiError)
-                } else {
-                    match response.unwrap() {
-                        Data::Blockchain(blockchain) => Ok(blockchain),
-                        _ => unreachable!()
-                    }
-                }
-            } else {
-                let e = request.err().unwrap();
-                error!("client request error: {}", e);
-                Err(LedgerError::NetworkError)
-            }
+            Ok(vec![])
         } else {
             error!("could not connect to node");
             Err(LedgerError::NetworkError)

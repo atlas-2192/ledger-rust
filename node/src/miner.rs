@@ -95,7 +95,7 @@ impl Miner {
                     Data::Block(block) => {
                         debug!("miner id: {}", id);
                         info!("block has been received from another node, \
-                        block id: {}, block hash: {}", &block.id, &block.hash,);
+                        block id: {}, block hash: {}", &block.id, print_bytes(&block.hash));
                         let storage = storage.clone();
                         let mut storage = storage.lock().await;
                         let added_block = storage.try_add_block(block);

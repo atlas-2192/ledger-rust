@@ -21,9 +21,9 @@ fn main() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
     runtime.block_on( async {
-        let node1 = Node::new("1234").await;
-        let node2 = Node::new("1235").await;
-        let node3 = Node::new("1236").await;
+        let node1 = Node::new(1, "1234").await;
+        let node2 = Node::new(2,"1235").await;
+        let node3 = Node::new(3,"1236").await;
 
         tokio::spawn(async move { node1.start().await });
         tokio::spawn(async move { node2.start().await });

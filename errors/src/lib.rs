@@ -3,8 +3,8 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum LedgerError {
-    #[error("Wrong event received")]
-    WrongEventError,
+    #[error("Wrong command received")]
+    WrongCommandError,
     #[error("Error while network_protocol interaction")]
     NetworkError,
     #[error("Serializing error")]

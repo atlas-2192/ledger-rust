@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 //use std::sync::Mutex;
-use network::{Data, SendEvent, serialize_data};
+use network::{Data, p2p::SendEvent, serialize_data};
 use state::Block;
 use crate::connector::{Connect, Connector};
 use async_trait::async_trait;
@@ -64,7 +64,7 @@ impl Sender {
             let socket = TcpStream::connect(socket_addr).await;
             if let Ok(mut socket) = socket {
                 tokio::spawn(async move {
-                    let res = network::send_request(
+                    let res = network::p2p::send_data(
                         &mut socket,
                         serialize_data(&block), SendEvent::SendBlock)
                         .await;

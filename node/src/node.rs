@@ -1,19 +1,18 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{SocketAddr};
 use std::str::FromStr;
-use std::sync::{Arc, MutexGuard};
+use std::sync::{Arc};
 //use std::sync::Mutex;
-use std::thread;
 use std::time::Duration;
 use bincode::serialize;
 
-use queues::{Queue, queue};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{ AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio::sync::{Mutex, TryLockError};
-use tracing::{debug, event, info, Level, span};
-use tracing::field::debug;
+use tokio::sync::{Mutex};
+use tracing::{debug, error, event, info, Level, span};
 
-use network::Data;
+use network::{Data, p2p::process_incoming_data, serialize_data};
+use network::client2node::{RequestType, node_response};
+use state::Block;
 
 use crate::connector::{Connect, Connector};
 use crate::miner::Miner;
@@ -24,6 +23,7 @@ use crate::storage::Storage;
 const LOCAL_HOST: &str = "127.0.0.1:";
 
 pub struct Node {
+    node_id: u64,
     peer_address: SocketAddr,
     receiver: Arc<Mutex<Receiver>>,
     sender: Arc<Mutex<Sender>>,
@@ -32,9 +32,10 @@ pub struct Node {
 
 impl Node {
 
-    pub async fn new(local_port: &str) -> Self {
+    pub async fn new(node_id: u64, local_port: &str) -> Self {
         let addr = SocketAddr::from_str((String::from(LOCAL_HOST) + local_port).as_str()).unwrap();
         Self {
+            node_id,
             peer_address: addr,
             receiver: Arc::new(Mutex::new(Receiver::new(addr).await)),
             sender: Arc::new(Mutex::new(Sender::new(addr))),
@@ -90,38 +91,42 @@ impl Node {
         info!("listen_api_requests started on {}", &addr);
         loop {
             if let Ok((mut socket, _)) = listener.accept().await {
-
                 let miner = self.miner.clone();
-                let miner = miner.lock().await;
-                let storage = miner.storage.clone();
-                loop {
-                    match storage.try_lock() {
-                        Ok(storage) => {
-                            let blockchain = storage.get_blockchain_by_ref();
-                            let buf = serialize(blockchain).unwrap();
-                            let len = socket.write(buf.as_slice()).await.unwrap();
-                            debug!("{} bytes has written", len);
-                            socket.flush().await.expect("could not flush buffer");
-                            break
-                        }
-                        Err(_) => {
-                            debug!("storage is locked yet");
-                            tokio::time::sleep(Duration::from_millis(300)).await
-                        }
-                    }
+                if let Err(e) = node_response(
+                    &mut socket,
+                    |m| get_blockchain_data(m),
+                    miner)
+                    .await {
+                    error!("api request error: {}", e);
+                    continue
                 }
             }
         }
     }
 }
 
-//                 let mut buf: [u8; 1] = [0; 1];
-//                 socket.read(&mut buf).await.expect("could not read request command");
-//                 if buf[0] != 5 {
-//                     let err_resp: [u8; 1] = [0; 1];
-//                     socket.write(err_resp.as_slice()).await.expect("could not write error response");
-//                     continue
-//                 } else {
-//                     let resp = [1u8];
-//                     socket.write(resp.as_slice()).await.expect("could not write response");
-//                 }
+async fn get_blockchain_data(miner: Arc<Mutex<Miner>>, request_type: RequestType) -> Vec<u8>
+{
+    let miner = miner.lock().await;
+    let storage = miner.storage.clone();
+    loop {
+        match storage.try_lock() {
+            Ok(storage) => {
+                match request_type {
+                    RequestType::NodeBlockchain { height } => {
+                        let blockchain = storage.get_blockchain_by_ref();
+                        let blockchain_of_required_length =
+                            blockchain.iter().rev().take(height as usize).collect::<Vec<&Block>>();
+                        return serialize_data(blockchain_of_required_length);
+                    }
+                    RequestType::Block { ref hash } => { todo!() }
+                    RequestType::Transaction { ref hash } => { todo!() }
+                }
+            }
+            Err(_) => {
+                debug!("storage is locked yet");
+                tokio::time::sleep(Duration::from_millis(300)).await
+            }
+        }
+    }
+}

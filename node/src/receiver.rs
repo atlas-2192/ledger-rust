@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{
 use async_trait::async_trait;
 use tracing::{error, trace};
 use errors::LedgerError;
-use network::{process_incoming_data, Data};
+use network::{p2p::process_incoming_data, Data};
 use crate::connector::{Connect, Connector};
 
 
