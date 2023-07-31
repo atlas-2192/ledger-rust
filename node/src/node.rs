@@ -111,10 +111,14 @@ async fn blockchain_data(miner: Arc<Mutex<Miner>>, request_type: Option<RequestT
             Ok(storage) => {
                 match request_type.unwrap() {
                     RequestType::NodeBlockchain { height } => {
+                        info!("requested height: {}", height);
                         let blockchain = storage.get_blockchain_by_ref();
                         let blockchain_of_required_length = blockchain.iter().rev()
                             .take(height as usize)
-                            .map(|item| item.to_owned())
+                            .map(|item| {
+                                debug!("block : {}", &item);
+                                item.to_owned()
+                            })
                             .collect::<Vec<Block>>();
                         let data = Data::Blockchain(blockchain_of_required_length);
                         return serialize_data(data)
@@ -149,15 +153,13 @@ mod tests {
         if let Ok(blockchain_response) = blockchain_response {
             match blockchain_response {
                 Data::Blockchain(blocks) => {
-                    //assert_eq!(blocks.len(), 2);
+                    assert_eq!(blocks.len(), 2);
                     for block in blocks {
                         info!{"block: {}", block}
                     }
                 },
                 _ => { unreachable![] }
             }
-        } else {
-            error!("Api response error")
         }
     }
 }

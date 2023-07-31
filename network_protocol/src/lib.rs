@@ -123,19 +123,6 @@ pub fn deserialize_data<'a, DATA: serde::de::Deserialize<'a>>(bytes:  &'a [u8])
         Err(DeserializationError)
     }
 }
-// pub fn deserialize_data(bytes: &[u8]) -> Result<Data, LedgerError>
-// {
-//      let data = DefaultOptions::new()
-//         .with_varint_encoding()
-//         .deserialize::<Data>(&bytes[..]);
-//     if let Ok(data) = data {
-//         Ok(data)
-//     } else {
-//         let err = data.err().unwrap();
-//         error!("network::deserialize_data() error: {}",  err);
-//         Err(DeserializationError)
-//     }
-// }
 
 #[cfg(test)]
 mod tests {

@@ -1,18 +1,12 @@
-use std::any::Any;
-use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use tokio::net::TcpStream;
-use derive_more::{Display};
-use tokio::io;
 use tokio::sync::Mutex;
 use tracing::error;
-use errors::LedgerError;
-use errors::LedgerError::WrongCommandError;
-use state::{Block, Transaction};
-use utils::print_bytes;
-use crate::{Data, DATA_LENGTH, deserialize_data, read_exact_async, serialize_data, write_all_async};
+use byteorder::{BigEndian, ReadBytesExt};
+use errors::LedgerError::{DeserializationError, WrongCommandError};
+use crate::{Data, DATA_LENGTH, deserialize_data, read_exact_async, write_all_async};
 
 #[repr(u8)]
 pub enum RequestType {
@@ -22,45 +16,6 @@ pub enum RequestType {
     Block { hash: Vec<u8>, } = 2, //
 
     Transaction{ hash: Vec<u8>, } = 3, //
-}
-
-// impl TryFrom<(u8, u8)> for RequestType {
-//     type Error = LedgerError;
-//
-//     fn try_from((cmd, data): (u8, u8)) -> Result<Self, Self::Error> {
-//         match cmd {
-//             1 => Ok( RequestType::NodeBlockchain { length: data,} ),
-//             _ => { Err(WrongCommandError) }
-//         }
-//     }
-// }
-
-
-// TODO generic newtype    impl Displayable for Vec<T: Display>
-// impl Display for RequestType<'_> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             RequestType::NodeBlockchain { height: length } => {
-//                 write!(f, "Node length of blocks : {}", length)
-//             }
-//             RequestType::Block { hash } => {
-//                 write!(f, "Block hash: {}", print_bytes(hash))
-//             }
-//             RequestType::Transaction { hash } => {
-//                 write!(f, "Transaction hash: {}", print_bytes(hash))
-//             }
-//         }
-//     }
-// }
-
-#[repr(u8)]
-pub enum ResponseType {
-
-    NodeBlockchain(Vec<Block>) = 1,
-
-    Block(Block) = 2,
-
-    Transaction(Transaction) = 3,
 }
 
 /// 1-st byte - request type, 2-nd byte = length of second value, 3-rd - second value,
@@ -74,8 +29,6 @@ pub async fn client_request(socket: &TcpStream, request_type: RequestType)
             write_all_async(socket, &cmd_buf).await?;
 
             let height_buf = height.to_be_bytes();
-            let height_buf_len = [height_buf.len() as _];
-            write_all_async(socket, &height_buf_len).await?;
             write_all_async(socket, &height_buf).await?;
 
             let mut len_buf = DATA_LENGTH;
@@ -113,18 +66,21 @@ pub async fn node_response<Miner, Func, Fut>(socket: &mut TcpStream,
     read_exact_async(socket, &mut cmd_buf).await?;
     match cmd_buf[0] {
         1u8 => {
-            // let mut height_len = [0u8; 8];
-            // read_exact_async(socket, &mut height_len).await?;
-            // let len = u64::from_be_bytes(height_len);
             let mut height_buf = [0u8; 8]; //vec![0; len as _];
             read_exact_async(socket, &mut height_buf).await?;
-            let height = u64::from_be_bytes(height_buf);
-            let request_type = RequestType::NodeBlockchain { height };
-            let response_buf = fn_blockchain_data(miner, Some(request_type)).await;
-            let response_buf_len = (response_buf.len() as u32).to_be_bytes();
-            write_all_async(socket, &response_buf_len).await?;
-            write_all_async(socket, response_buf.as_slice()).await?;
-            Ok(())
+            let height = height_buf.as_slice().read_u64::<BigEndian>();
+            if let Ok(height) = height {
+                let request_type = RequestType::NodeBlockchain { height };
+                let response_buf = fn_blockchain_data(miner, Some(request_type)).await;
+                let response_buf_len = (response_buf.len() as u32).to_be_bytes();
+                write_all_async(socket, &response_buf_len).await?;
+                write_all_async(socket, response_buf.as_slice()).await?;
+                return Ok(())
+            } else {
+                let err = height.err().unwrap();
+                error!("read_u64::<BigEndian>() error : {}", err);
+                return Err(Error::from(ErrorKind::InvalidInput))
+            }
         }
         2u8 => {
             todo!()
