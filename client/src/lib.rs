@@ -4,6 +4,7 @@ use tokio::net::{TcpStream};
 use tracing::{debug, error};
 use errors::LedgerError;
 use network::{Data, p2p::process_incoming_data, p2p::send_data, p2p::SendEvent};
+use network::client2node::RequestType;
 use state::Block;
 
 
@@ -50,33 +51,42 @@ impl Client {
         }
     }
 
-    pub async fn get_node_blockchain(addr: SocketAddr) -> Result<Vec<Block>, LedgerError> {
-        let stream = TcpStream::connect(addr).await;
-        return if let Ok(mut stream) = stream {
-            Ok(vec![])
+    pub async fn get_blockchain_data(node_addr: SocketAddr, request_type: RequestType)
+        -> Result<Data, LedgerError>
+    {
+        let socket = TcpStream::connect(node_addr).await;
+        return if let Ok(mut socket) = socket {
+            match request_type {
+                RequestType::NodeBlockchain { .. } => {
+                    return if let Ok(response) =
+                        network::client2node::client_request(&mut socket, request_type).await {
+                        Ok(response)
+                    } else {
+                        Err(LedgerError::ApiError)
+                    }
+                }
+                RequestType::Block { .. } => { todo!() }
+                RequestType::Transaction { .. } => { todo!() }
+            }
         } else {
             error!("could not connect to node");
             Err(LedgerError::NetworkError)
-        };
+        }
     }
 }
 
 fn get_initial_peers() -> HashMap<u32, SocketAddr> {
     HashMap::from([
-                (1, SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234)),
-                (2, SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1235)),
-                (3, SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1236))
+                (1, utils::socket_addr("1234")),
+                (2, utils::socket_addr("1235")),
+                (3, utils::socket_addr("1236"))
             ])
 }
 
 #[cfg(test)]
 mod tests {
-    use std::net::SocketAddr;
-    use std::str::FromStr;
-    use tracing::{error, info};
     use network::{ serialize_data};
     use state::{Transaction};
-    use utils::LOCAL_HOST;
     use crate::Client;
 
     #[tokio::test]
@@ -85,17 +95,6 @@ mod tests {
         let mut client = Client::new();
         client.send_transaction_to_network(serialize_data(&transaction)).await;
     }
-
-    #[tokio::test]
-    async fn get_blockchain_state() {
-        let addr = SocketAddr::from_str((String::from(LOCAL_HOST) + "1244").as_str()).unwrap();
-        if let Ok(blockchain) = Client::get_node_blockchain(addr).await {
-            blockchain.iter().for_each(|b| info!("block : {}", b));
-        } else {
-            error!("API error")
-        }
-    }
-
 
     fn create_account_transaction() -> Transaction {
         Transaction {

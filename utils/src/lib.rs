@@ -1,4 +1,6 @@
-use std::fmt::Display;
+
+use std::net::SocketAddr;
+use std::str::FromStr;
 use chrono::prelude::*;
 
 pub const LOCAL_HOST: &str = "127.0.0.1:";
@@ -9,6 +11,10 @@ pub fn print_bytes(bytes: &[u8]) -> String {
 
 pub fn string_to_hash(string: &str) -> Vec<u8> {
     string.as_bytes().to_vec()
+}
+
+pub fn socket_addr(port: &str) -> SocketAddr {
+    SocketAddr::from_str((String::from(LOCAL_HOST) + port).as_str()).unwrap()
 }
 
 pub fn convert_timestamp_to_day_time(timestamp: i64) -> DateTime<Utc> {

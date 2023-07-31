@@ -132,7 +132,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_channel() {
-        let address = SocketAddr::from_str((String::from(LOCAL_HOST) + "1234").as_str()).unwrap();
+        let address =  utils::socket_addr("1234");
         let mut receiver = crate::receiver::Receiver::new(address).await;
         let mut miner = crate::miner::Miner::new(1);
         //miner.run().await;

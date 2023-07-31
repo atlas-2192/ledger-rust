@@ -98,9 +98,9 @@ impl Peers {
     fn new() -> Self {
         Self {
             addresses: HashMap::from([
-                (1, SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234)),
-                (2, SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1235)),
-                (3, SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1236))
+                (1, utils::socket_addr("1234")),
+                (2, utils::socket_addr("1235")),
+                (3, utils::socket_addr("1236"))
             ])
         }
     }
