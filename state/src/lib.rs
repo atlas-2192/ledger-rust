@@ -115,7 +115,7 @@ impl Display for Block {
                &self.nonce,
                print_bytes(&self.signature),
                print_bytes(&self.hash),
-               print_bytes(&self.previous_block_hash.clone().unwrap_or(vec![])),
+               print_bytes(&self.previous_block_hash.clone().unwrap_or("None".as_bytes().to_vec())),
                self.transactions.iter()
                     .map(|c| c.to_string())
                     .reduce(|acc, c| acc + " " + c.as_str())

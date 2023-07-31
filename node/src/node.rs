@@ -115,10 +115,7 @@ async fn blockchain_data(miner: Arc<Mutex<Miner>>, request_type: Option<RequestT
                         let blockchain = storage.get_blockchain_by_ref();
                         let blockchain_of_required_length = blockchain.iter().rev()
                             .take(height as usize)
-                            .map(|item| {
-                                debug!("block : {}", &item);
-                                item.to_owned()
-                            })
+                            .map(|item| {item.to_owned()})
                             .collect::<Vec<Block>>();
                         let data = Data::Blockchain(blockchain_of_required_length);
                         return serialize_data(data)
@@ -146,14 +143,14 @@ mod tests {
     async fn receive_blockchain_request_and_response_ok() {
         tracing_subscriber::fmt::init();
 
-        let request_type = RequestType::NodeBlockchain { height: 2};
+        let request_type = RequestType::NodeBlockchain { height: 3};
         let socket_addr = utils::socket_addr("1244");
         let blockchain_response =
             Client::get_blockchain_data(socket_addr, request_type).await;
         if let Ok(blockchain_response) = blockchain_response {
             match blockchain_response {
                 Data::Blockchain(blocks) => {
-                    assert_eq!(blocks.len(), 2);
+                    assert_eq!(blocks.len(), 3);
                     for block in blocks {
                         info!{"block: {}", block}
                     }

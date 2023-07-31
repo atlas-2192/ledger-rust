@@ -33,8 +33,7 @@ impl Receiver {
 
     pub async fn run(&mut self) {
         loop {
-            while let Ok((mut socket, addr)) = self.listener.accept().await {
-                //trace!("accepted socket : {addr}");
+            while let Ok((mut socket, _)) = self.listener.accept().await {
                 let processed = Self::process_incoming(self, &mut socket).await;
                 if processed.is_err() {
                     error!("error processing incoming data")
@@ -46,7 +45,6 @@ impl Receiver {
     async fn process_incoming(&mut self, socket: &mut TcpStream)
         -> Result<(), LedgerError>
     {
-        //trace!("process_incoming on peer: {}, remote socket: {}", &self.address, &socket.peer_addr().unwrap());
         let data = process_incoming_data(socket).await;
         if data.is_ok() {
             let tx = self.connector_tx.as_ref().unwrap();

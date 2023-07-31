@@ -40,7 +40,7 @@ impl Sender {
                 while let Some(data) = connector_rx.recv().await {
                     match data {
                         Data::Block(block) => {
-                            trace!("get block from connector: {}", &block);
+                            //trace!("get block from connector: {}", &block);
                             Self::send_block_to_network(address, peers, block).await;
                         }
                         Data::Transaction(_) => {

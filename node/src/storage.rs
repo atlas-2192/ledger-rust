@@ -1,4 +1,4 @@
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use state::{Accounts, Assets, Block, MAX_TRANSACTIONS_IN_BLOCK};
 use network::{Data};
 
@@ -9,25 +9,26 @@ use utils::{print_bytes, convert_timestamp_to_day_time};
 
 #[derive(Debug)]
 pub(crate) struct Storage {
+    id: u64,
     blockchain: Vec<Block>,  // TODO persistence
     accounts: Accounts,
     /// Key is a tuple of format (account_id, asset_id)
-    assets: Assets,
-    pub(crate) connector_rx: Option<tokio::sync::mpsc::Receiver<Data>>
+    assets: Assets
 }
 
 impl Storage {
 
-    pub fn new() -> Self {
+    pub fn new(id: u64,) -> Self {
         Self {
+            id,
             blockchain: Default::default(),
             accounts: Default::default(),
             assets: Default::default(),
-            connector_rx: None,
         }
     }
 
     pub fn try_add_block(&mut self, block: Block) -> Result<(), LedgerError> {
+        debug!("storage id: {}", &self.id);
         let previous_block = self.blockchain.last();
         if previous_block.is_some() && &block.id != &0u64 {
             let previous_block = previous_block.unwrap();
@@ -38,16 +39,17 @@ impl Storage {
                         command.execute(&mut self.accounts, &mut self.assets);
                     }
                 };
+                let block_id = block.id;
                 self.blockchain.push(block);
-                //info!("Block with id {} added to node {} blockchain", &block.id, self.)
+                info!("Block with id {} added to node {} blockchain", block_id, self.id);
                 return Ok(())
             } else {
-                Err(LedgerError::BlockError)
+                return Err(LedgerError::BlockError)
             }
-        } else {
+        } else if previous_block.is_none() {
             Self::try_add_genesis_block(self, block)?;
-            Ok(())
         }
+        Ok(())
     }
 
     pub fn get_blockchain_by_ref(&self) -> &Vec<Block> {
@@ -74,7 +76,9 @@ impl Storage {
             error!("invalid block hash: {}", print_bytes(&block.hash));
             return Err(LedgerError::BlockError)
         }
+        let block_id = block.id;
         self.blockchain.push(block);
+        info!("Genesis block with id {} added to node {} blockchain", block_id, self.id);
         Ok(())
     }
 

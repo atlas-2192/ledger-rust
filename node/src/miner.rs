@@ -45,7 +45,7 @@ impl Miner {
             public_key,
             private_key,
             transaction_pool: Arc::new(Mutex::new(BinaryHeap::new())),
-            storage: Arc::new(Mutex::new(Storage::new())),
+            storage: Arc::new(Mutex::new(Storage::new(id))),
             connector_rx: Arc::new(Mutex::new(None)),
             connector_tx: Arc::new(Mutex::new(None)),
         }
@@ -137,9 +137,9 @@ impl Miner {
             let storage = storage.clone();
             let mut storage_lock = storage.lock().await;
             let previous_block = storage_lock.get_blockchain_by_ref().last();
-            // if let Some(b) = previous_block.as_ref() {
-            //     debug!("previous_block: {}", &b);
-            // }
+            if let Some(b) = previous_block.as_ref() {
+                debug!("previous_block: {}", &b);
+            }
             let previous_block_id;
             let previous_block_hash;
             match previous_block {
@@ -173,7 +173,6 @@ impl Miner {
                                 let transaction = transactions.pop().unwrap();
                                 ready_transactions.push(transaction);
                             }
-                            //info!("10 transactions are ready to mine");
                             return ready_transactions
                         }
                         Err(_) => {
@@ -183,7 +182,6 @@ impl Miner {
                 }
             }
                 .await;
-            //debug!("10 transactions have been received from transaction pool");
             debug!("mining block started, miner_id: {}", id);
             let block = tokio::task::spawn_blocking(move || {
                 Self::mine_block(
@@ -210,18 +208,10 @@ impl Miner {
                 let sent_block = connector_tx.send(data).await;
                 if sent_block.is_err() {
                     error!("error while sending block to connector: {}", sent_block.err().unwrap())
-                } else {
-                    //trace!("block sent to connector, miner_id: {}", id);
                 }
             }
         }
     }
-
-    /// FOR TEST
-    // async fn add_transaction_to_pool(transaction_pool: Arc<Mutex<TransactionPool>>,
-    //                                  transaction: Transaction) {
-    //     transaction_pool.lock().await.add_transaction_to_pool(transaction);
-    // }
 
     /// FOR TEST ONLY
     async fn add_block_to_storage(&mut self, block: Block) {

@@ -66,20 +66,18 @@ pub async fn node_response<Miner, Func, Fut>(socket: &mut TcpStream,
     read_exact_async(socket, &mut cmd_buf).await?;
     match cmd_buf[0] {
         1u8 => {
-            let mut height_buf = [0u8; 8]; //vec![0; len as _];
+            let mut height_buf = [0u8; 8];
             read_exact_async(socket, &mut height_buf).await?;
             let height = height_buf.as_slice().read_u64::<BigEndian>();
-            if let Ok(height) = height {
+            return if let Ok(height) = height {
                 let request_type = RequestType::NodeBlockchain { height };
                 let response_buf = fn_blockchain_data(miner, Some(request_type)).await;
                 let response_buf_len = (response_buf.len() as u32).to_be_bytes();
                 write_all_async(socket, &response_buf_len).await?;
                 write_all_async(socket, response_buf.as_slice()).await?;
-                return Ok(())
+                Ok(())
             } else {
-                let err = height.err().unwrap();
-                error!("read_u64::<BigEndian>() error : {}", err);
-                return Err(Error::from(ErrorKind::InvalidInput))
+                Err(Error::from(ErrorKind::InvalidInput))
             }
         }
         2u8 => {
