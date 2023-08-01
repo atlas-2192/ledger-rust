@@ -7,12 +7,8 @@ use tokio::sync::mpsc::{
 };
 use std::time::Duration;
 use tokio::sync::{Mutex};
-use chrono::{Timelike, Utc};
-//use futures::channel::mpsc;
-//use futures::channel::mpsc::{Sender, Receiver};
-//use futures::channel::mpsc::Sender;
-use ursa::keys::PublicKey;
-use ursa::keys::PrivateKey;
+use chrono::{Utc};
+use ursa::keys::{PublicKey, PrivateKey};
 use ursa::signatures::ed25519::Ed25519Sha512;
 use ursa::signatures::SignatureScheme;
 use crypto::Hash;
@@ -135,7 +131,7 @@ impl Miner {
         // mine block from received transactions
         loop {
             let storage = storage.clone();
-            let mut storage_lock = storage.lock().await;
+            let storage_lock = storage.lock().await;
             let previous_block = storage_lock.get_blockchain_by_ref().last();
             if let Some(b) = previous_block.as_ref() {
                 debug!("previous_block: {}", &b);
@@ -201,6 +197,7 @@ impl Miner {
                 let err = added_block.err().unwrap();
                 error!("miner_id: {id}, failed to add self-mined block: {}", err)
             } else {
+
                 let connector_tx = connector_tx.clone();
                 let mut connector_tx = connector_tx.lock().await;
                 let connector_tx = connector_tx.as_mut().unwrap();
@@ -297,9 +294,7 @@ impl Connect for Miner {
 
 #[cfg(test)]
 mod tests {
-    use std::hash::Hash;
     use std::sync::Arc;
-    use blake2::Digest;
     use rand::prelude::*;
     use chrono::Utc;
     use crypto::hash;
@@ -308,23 +303,21 @@ mod tests {
     use ursa::signatures::SignatureScheme;
     use utils::{LOCAL_HOST, print_bytes};
     use crate::miner::{ Miner};
-    use crate::storage::Storage;
-    use tokio::sync::{Mutex};
     use tracing::info;
 
     #[test]
     fn validate_block_hash() {
-        // for _ in 0..10 {
-        //     let block = generate_block(
-        //         11134,
-        //         vec![
-        //             generate_transaction(),
-        //             generate_transaction(),
-        //             generate_transaction()
-        //         ]);
-        //     let block_hash = hash(block.to_string().as_bytes());
-        //     info!("block hash is {}", print_bytes(&block_hash));
-        // }
+        for _ in 0..10 {
+            let block = generate_block(
+                11134,
+                vec![
+                    generate_transaction(),
+                    generate_transaction(),
+                    generate_transaction()
+                ]);
+            let block_hash = hash(block.to_string().as_bytes());
+            info!("block hash is {}", print_bytes(&block_hash));
+        }
 
         let block = generate_block(
                 11134,
@@ -341,8 +334,8 @@ mod tests {
         // let mut block_to_check = block.clone();
         // block_to_check.hash = vec![];
         // let hash = hash(block_to_check.to_string().as_bytes());
-        //hash == block.hash
-        //assert_eq!(&block_hash, &block.hash)
+        // hash == block.hash;
+        // assert_eq!(&block_hash, &block.hash)
     }
 
     #[tokio::test]
@@ -360,32 +353,6 @@ mod tests {
             Some(previous_block.id),
             current_block_transactions);
         assert!(&block.hash.starts_with(&[0, 0]))
-    }
-
-    #[tokio::test]
-    async fn receive_transactions_and_start_mine_block_succeed() {
-        let miner = Arc::new(Mutex::new(Miner::new(1)));
-        let miner1 = miner.clone();
-        let miner3 = miner.clone();
-        let previous_block_transactions = vec![generate_transaction(), generate_transaction()];
-        let previous_block = generate_block(2, previous_block_transactions);
-        tokio::spawn(async move {
-            let mut miner2 = miner1.lock().await;
-            miner2.add_block_to_storage(previous_block).await;
-            let miner4 = miner.clone();
-            tokio::spawn(async move {
-                let miner4 = miner4.lock().await;
-                miner4.run().await; }
-            );
-        });
-        tokio::spawn(async move {
-            for _ in 0..10 {
-                let mut miner3 = miner3.lock().await;
-                //miner3.add_transaction_to_pool(generate_transaction());
-            }
-        })
-            .await
-            .expect("Could not add transactions to transaction pool");
     }
 
     fn generate_block(nonce: u32, transactions: Vec<Transaction>) -> Block {

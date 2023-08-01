@@ -1,11 +1,10 @@
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{ SocketAddr};
 use tokio::net::{TcpStream};
 use tracing::{debug, error};
 use errors::LedgerError;
 use network::{Data, p2p::process_incoming_data, p2p::send_data, p2p::SendEvent};
 use network::client2node::RequestType;
-use state::Block;
 
 
 pub struct Client {
@@ -28,9 +27,6 @@ impl Client {
         for (_, addr) in addresses.iter().enumerate() {
             let addr = addr.clone();
             let transaction_clone = transaction.clone();
-            // if !addr.eq(&SocketAddr::from_str("127.0.0.1:1234").unwrap()) {  // for test
-            //     continue
-            // }
             let a = tokio::spawn(async move {
                 let stream = TcpStream::connect(addr.clone()).await;
                 if let Ok(mut stream) = stream {
@@ -45,19 +41,19 @@ impl Client {
                 } else {
                     error!("could not connect to node");
                 }
-            }) //;
+            })
                 .await;
             error!("{}", a.is_err());
         }
     }
 
-    pub async fn get_blockchain_data(node_addr: SocketAddr, request_type: RequestType)
-        -> Result<Data, LedgerError>
+    pub async fn client_request(node_addr: SocketAddr, request_type: RequestType)
+                                -> Result<Data, LedgerError>
     {
         let socket = TcpStream::connect(node_addr).await;
         return if let Ok(mut socket) = socket {
             match request_type {
-                RequestType::NodeBlockchain { .. } => {
+                RequestType::Blockchain { .. } => {
                     return if let Ok(response) =
                         network::client2node::client_request(&mut socket, request_type).await {
                         Ok(response)

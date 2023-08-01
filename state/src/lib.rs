@@ -4,9 +4,11 @@ use std::fmt::{Display, Formatter};
 use crypto::Hash;
 use serde::{Deserialize, Serialize};
 use derive_more::Display;
+use errors::LedgerError;
 use utils::print_bytes;
 
 pub const MAX_TRANSACTIONS_IN_BLOCK: usize = 100; // TODO constraint size of block
+pub const NATIVE_COIN: &str = "NATIVE";
 
 #[derive(Debug, Clone)]
 pub struct Account {
@@ -17,7 +19,13 @@ pub type Accounts = HashMap<u32, Account>;
 
 #[derive(Debug, Clone)]
 pub struct Asset {
-    value: i32,
+    value: u32,
+}
+
+impl Asset {
+    pub fn new_with_value(value: u32) -> Self {
+        Self { value }
+    }
 }
 
 pub type Assets = HashMap<(u32, String), Asset>;
@@ -51,7 +59,6 @@ impl PartialOrd<Self> for Transaction {
     }
 }
 
-// TODO
 impl Ord for Transaction {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap()
@@ -76,7 +83,7 @@ pub enum Command {
                      account_id,     value,     asset_id)]
     AddFunds {
         account_id: u32,
-        value: i32,
+        value: u32,
         asset_id: String,
     },
     #[display(fmt = "account_from_id: {}, account_to_id: {} value: {}, asset_id: {}",
@@ -84,7 +91,7 @@ pub enum Command {
     TransferFunds {
         account_from_id: u32,
         account_to_id: u32,
-        value: i32,
+        value: u32,
         asset_id: String,
     }
 }
@@ -124,7 +131,11 @@ impl Display for Block {
 }
 
 impl Command {
-    pub fn execute(&self, accounts: &mut Accounts, assets: &mut Assets) {
+    pub fn execute(&self,
+                   accounts: &mut Accounts,
+                   assets: &mut Assets)
+        -> Result<(), LedgerError>
+    {
         match self {
             Self::CreateAccount { public_key } => {
                 accounts.insert(
@@ -133,6 +144,7 @@ impl Command {
                         public_key: public_key.clone(),
                     },
                 );
+                Ok(())
             }
             Self::AddFunds {
                 account_id,
@@ -140,6 +152,7 @@ impl Command {
                 asset_id,
             } => {
                 assets.insert((*account_id, asset_id.clone()), Asset { value: *value });
+                Ok(())
             },
 
             Self::TransferFunds {
@@ -148,7 +161,16 @@ impl Command {
                 value,
                 asset_id
             } => {
-                todo!()
+                if let Some(account_asset) = assets.get(&(*account_from_id, asset_id.clone())) {
+                    if &account_asset.value < value {
+                        return Err(LedgerError::InsufficientFunds)
+                    }
+                    assets.remove(&(*account_from_id, asset_id.clone()));
+                    assets.insert((*account_to_id, asset_id.clone()), Asset { value : *value });
+                    Ok(())
+                } else {
+                    Err(LedgerError::NoSuchAsset)
+                }
             }
         }
     }

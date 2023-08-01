@@ -21,5 +21,10 @@ pub enum LedgerError {
     PersistenceError,
     #[error("API error")]
     ApiError,
+    #[error("Insufficient funds")]
+    InsufficientFunds,
+    #[error("No such asset")] // TODO ugly name
+    NoSuchAsset,
+    
 }
 

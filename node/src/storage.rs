@@ -1,6 +1,5 @@
 use tracing::{debug, error, info};
-use state::{Accounts, Assets, Block, MAX_TRANSACTIONS_IN_BLOCK};
-use network::{Data};
+use state::{Accounts, Asset, Assets, Block, MAX_TRANSACTIONS_IN_BLOCK, NATIVE_COIN};
 
 use crypto;
 use crypto::hash;
@@ -32,19 +31,20 @@ impl Storage {
         let previous_block = self.blockchain.last();
         if previous_block.is_some() && &block.id != &0u64 {
             let previous_block = previous_block.unwrap();
-            if Self::validate_block(self, &block, previous_block) {
+            return if Self::validate_block(self, &block, previous_block) {
                 // TODO      persistence < --- > state in memory???
                 for commands in block.transactions.iter().map(|transaction| &transaction.commands) {
                     for command in commands {
-                        command.execute(&mut self.accounts, &mut self.assets);
+                        command.execute(&mut self.accounts, &mut self.assets)?
                     }
                 };
                 let block_id = block.id;
                 self.blockchain.push(block);
                 info!("Block with id {} added to node {} blockchain", block_id, self.id);
-                return Ok(())
+                Self::reward_for_mined_block(self);
+                Ok(())
             } else {
-                return Err(LedgerError::BlockError)
+                Err(LedgerError::BlockError)
             }
         } else if previous_block.is_none() {
             Self::try_add_genesis_block(self, block)?;
@@ -131,6 +131,10 @@ impl Storage {
             }
         }
         true
+    }
+
+    fn reward_for_mined_block(&mut self) {
+        self.assets.insert((1, String::from(NATIVE_COIN)), Asset::new_with_value(1));
     }
 }
 

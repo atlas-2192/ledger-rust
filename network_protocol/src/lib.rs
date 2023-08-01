@@ -58,6 +58,7 @@ pub enum Data {
     Peer(String) = 3,
     Peers(HashMap<String, String>) = 4,
     Blockchain(Vec<Block>) = 5,
+    NodeResponse(HashMap<String, String>) = 6,
 }
 
 impl Display for Data {
@@ -86,6 +87,13 @@ impl Display for Data {
                            .reduce(|acc, s| acc + ", " + s.as_str())
                            .unwrap())
             }
+            Data::NodeResponse(ref hashmap) => {
+                // write!(f, "data (node response to client) : {}",
+                //        hashmap.iter()
+                //            .reduce(|acc, (k,v)|  acc + "\nkey: " + k + "\nvalue: " + v)
+                //            .unwrap())
+                todo!()
+            }
         }
     }
 }
@@ -98,7 +106,8 @@ impl Data {
             Data::Transaction(_) => 2,
             Data::Peer(_) => 3,
             Data::Peers(_) => 4,
-            Data::Blockchain(_) => 5
+            Data::Blockchain(_) => 5,
+            Data::NodeResponse(_) => 6
         }
     }
 }

@@ -1,12 +1,10 @@
-use std::io::{self, Error, ErrorKind};
+use std::io::{Error, ErrorKind};
 use tokio::net::{TcpStream};
 use std::convert::{TryFrom};
-use std::fmt::{ Formatter};
 use derive_more::{Display};
 use tracing::{error, trace};
 use errors::LedgerError;
 use errors::LedgerError::*;
-use state::{Block, Transaction};
 use crate::{Data, DATA_LENGTH, deserialize_data, read_exact_async, write_all_async};
 
 pub const NO_DATA: &str = "no data";
@@ -237,7 +235,6 @@ async fn write_response(socket: &TcpStream) -> bool {
     let mut buf: [u8; 1] = [1u8];
     let res = write_all_async(socket, &mut buf).await;
     if res.is_ok() {
-        //trace!("write_response ok");
         true
     } else {
         trace!("write_response failed");

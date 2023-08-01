@@ -78,7 +78,7 @@ impl Node {
 
         event!(Level::INFO, "node started on 127.0.0.1:{}", port);
 
-        Self::listen_api_requests(self, port).await;
+        Self::listen_api_requests(&self, port).await;
     }
 
     async fn listen_api_requests(&self, mut port: u16) {
@@ -110,7 +110,7 @@ async fn blockchain_data(miner: Arc<Mutex<Miner>>, request_type: Option<RequestT
         match storage.try_lock() {
             Ok(storage) => {
                 match request_type.unwrap() {
-                    RequestType::NodeBlockchain { height } => {
+                    RequestType::Blockchain { height } => {
                         info!("requested height: {}", height);
                         let blockchain = storage.get_blockchain_by_ref();
                         let blockchain_of_required_length = blockchain.iter().rev()
@@ -143,10 +143,10 @@ mod tests {
     async fn receive_blockchain_request_and_response_ok() {
         tracing_subscriber::fmt::init();
 
-        let request_type = RequestType::NodeBlockchain { height: 3};
+        let request_type = RequestType::Blockchain { height: 3};
         let socket_addr = utils::socket_addr("1244");
         let blockchain_response =
-            Client::get_blockchain_data(socket_addr, request_type).await;
+            Client::client_request(socket_addr, request_type).await;
         if let Ok(blockchain_response) = blockchain_response {
             match blockchain_response {
                 Data::Blockchain(blocks) => {
