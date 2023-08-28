@@ -49,6 +49,7 @@ impl Sender {
                         Data::Peer(peer) => { todo!() }
                         Data::Peers(peers) => { todo!() }
                         Data::Blockchain(blocks) => { todo!() }
+                        Data::NodeResponse(_) => todo!()
                     }
                 }
             }

@@ -1,9 +1,4 @@
-#![feature(slice_pattern)]
-extern crate core;
-
-use core::slice::SlicePattern;
-use blake2::{Blake2s, Blake2s256, Digest};
-use blake2::digest::typenum::U32;
+use blake2::{ Blake2s256, Digest};
 use sha2::Sha256;
 
 pub type Hash = Vec<u8>;

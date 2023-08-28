@@ -49,19 +49,19 @@ impl PartialEq<Self> for Transaction {
 
 impl PartialOrd<Self> for Transaction {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let difference = self.fee as i64 - other.fee as i64;
-        match difference {
-            d if d > 0 => Some(Ordering::Greater),
-            d if d < 0 => Some(Ordering::Less),
-            d if d == 0 => Some(Ordering::Equal),
-            _ => unreachable!()
-        }
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for Transaction {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        let difference = i64::from(self.fee.clone()) - i64::from(other.fee.clone());
+        match difference {
+            d if d > 0 => Ordering::Greater,
+            d if d < 0 => Ordering::Less,
+            0 => Ordering::Equal,
+            _ => unreachable!()
+        }
     }
 }
 
@@ -151,7 +151,7 @@ impl Command {
                 value,
                 asset_id,
             } => {
-                assets.insert((*account_id, asset_id.clone()), Asset { value: *value });
+                assets.insert((account_id.clone(), asset_id.clone()), Asset { value: value.clone() });
                 Ok(())
             },
 
@@ -161,12 +161,12 @@ impl Command {
                 value,
                 asset_id
             } => {
-                if let Some(account_asset) = assets.get(&(*account_from_id, asset_id.clone())) {
-                    if &account_asset.value < value {
+                if let Some(account_asset) = assets.get(&(account_from_id.clone(), asset_id.clone())) {
+                    if account_asset.value < *value {
                         return Err(LedgerError::InsufficientFunds)
                     }
-                    assets.remove(&(*account_from_id, asset_id.clone()));
-                    assets.insert((*account_to_id, asset_id.clone()), Asset { value : *value });
+                    assets.remove(&(account_from_id.clone(), asset_id.clone()));
+                    assets.insert((account_to_id.clone(), asset_id.clone()), Asset { value: value.clone() });
                     Ok(())
                 } else {
                     Err(LedgerError::NoSuchAsset)
