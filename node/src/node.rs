@@ -30,7 +30,7 @@ pub struct Node {
 impl Node {
 
     pub async fn new(node_id: u64, local_port: &str) -> Self {
-        let addr =  utils::socket_addr(local_port);
+        let addr = utils::socket_addr(local_port);
         Self {
             node_id,
             peer_address: addr,

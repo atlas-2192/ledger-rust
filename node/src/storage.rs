@@ -136,5 +136,9 @@ impl Storage {
     fn reward_for_mined_block(&mut self) {
         self.assets.insert((1, String::from(NATIVE_COIN)), Asset::new_with_value(1));
     }
+
+    fn persist_block(block: &Block) {
+
+    }
 }
 

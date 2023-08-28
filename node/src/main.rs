@@ -47,7 +47,7 @@ mod tests {
     use state::{Command, Transaction};
 
 
-    /// Assuming that nodes has started during performing this test
+    /// Assuming that nodes have started before this test performs
     #[tokio::test]
     async fn send_transactions_to_network() {
 

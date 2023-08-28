@@ -7,5 +7,6 @@ members = [
     "node",
     "state",
     "errors",
-    "utils"
+    "utils",
+    "staff"
 ]
